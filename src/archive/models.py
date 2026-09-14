@@ -35,6 +35,7 @@ class SourceItem:
     date_raw: str | None = None
     location_raw: str | None = None
     rights_raw: str | None = None
+    collection_raw: str | None = None
     metadata_raw: dict[str, Any] = field(default_factory=dict)
     ingested_at: datetime = field(default_factory=datetime.utcnow)
 
