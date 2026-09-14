@@ -28,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_output_args(sample_911da, default_delay=1.0)
     sample_911da.add_argument("--collection", type=int, default=None)
+    sample_911da.add_argument(
+        "--details",
+        action="store_true",
+        help="Enrich each enumerated record with its Dublin Core XML metadata",
+    )
 
     sample_ia = subparsers.add_parser(
         "sample-internet-archive",
@@ -70,7 +75,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sample-911da":
         adapter = September11DigitalArchiveAdapter(request_delay_s=args.delay)
-        records = adapter.sample(limit=args.limit, collection_id=args.collection)
+        records = adapter.sample(
+            limit=args.limit,
+            collection_id=args.collection,
+            enrich=args.details,
+        )
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")
         return 0
