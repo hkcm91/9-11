@@ -1,0 +1,22 @@
+sources:
+  - id: nist-example
+    name: NIST public 9/11 collection
+    type: government
+    homepage_url: https://www.nist.gov/
+    access_method: web
+    rights_status: review_required
+    rights_notes: Metadata may be public while individual media reuse terms can differ.
+    priority: high
+    estimated_item_count: null
+    enabled: false
+
+  - id: archive-example
+    name: Internet Archive collection placeholder
+    type: archive
+    homepage_url: https://archive.org/
+    access_method: api_or_web
+    rights_status: item_specific
+    rights_notes: Preserve each item's rights/license metadata.
+    priority: high
+    estimated_item_count: null
+    enabled: false
