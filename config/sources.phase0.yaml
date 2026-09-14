@@ -1,0 +1,161 @@
+sources:
+  - id: nist-wtc-disaster-repository
+    name: NIST World Trade Center Disaster Investigation Materials
+    type: government_repository
+    homepage_url: https://www.nist.gov/world-trade-center-investigation/photos-videos-and-simulations
+    access_method: web_repository
+    public_access: true
+    rights_status: item_specific_review_required
+    rights_notes: NIST states that repository materials may include third-party copyrighted images, videos, and documents; preserve per-item copyright information and do not assume redistribution rights.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [photo, video, document, simulation]
+    priority: critical
+    estimated_item_count: null
+    enabled: true
+
+  - id: september11-digital-archive
+    name: September 11 Digital Archive
+    type: digital_archive
+    homepage_url: https://911digitalarchive.org/
+    browse_url: https://911digitalarchive.org/items/browse
+    access_method: omeka_web_and_export
+    public_access: true
+    rights_status: item_specific_review_required
+    rights_notes: Treat collection/item rights and contributor terms individually; preserve original archive metadata and identifiers.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [photo, video, audio, document, testimony, email, web]
+    priority: critical
+    estimated_item_count: 70000
+    notes: Browse interface currently exposes 70k+ item records and machine-readable output formats including JSON, CSV, RDF, and Omeka XML.
+    enabled: true
+
+  - id: loc-september11-digital-archive-record
+    name: Library of Congress - September 11 Digital Archive record
+    type: national_library
+    homepage_url: https://www.loc.gov/item/2003615054/
+    access_method: web_catalog
+    public_access: true
+    rights_status: collection_specific
+    rights_notes: Use LOC metadata as provenance/authority context; media reuse must follow the rights status of the underlying collection/item.
+    metadata_quality: high
+    ingest_mode: authority_metadata
+    media_types: [catalog_record, mixed_media]
+    priority: high
+    estimated_item_count: null
+    enabled: true
+
+  - id: nara-911-commission-records
+    name: National Archives - 9/11 Commission Records
+    type: government_archives
+    homepage_url: https://www.archives.gov/research/9-11
+    access_method: web_catalog_and_records
+    public_access: partial
+    rights_status: item_specific_review_required
+    rights_notes: Publicly released records should be cataloged separately from classified/unreleased holdings; third-party material may carry additional restrictions.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [document, hearing, interview, record]
+    priority: high
+    estimated_item_count: null
+    notes: NARA reports approximately 570 cubic feet of textual records, with a substantial classified portion.
+    enabled: true
+
+  - id: 911-memorial-museum-collection
+    name: National September 11 Memorial & Museum Collection
+    type: museum_collection
+    homepage_url: https://911memorial.org/visit/museum/collection
+    catalog_url: https://collection.911memorial.org/
+    access_method: web_catalog
+    public_access: partial
+    rights_status: item_specific_review_required
+    rights_notes: Catalog access does not imply permission to copy or redistribute media. Prefer indexing, attribution, and deep-linking unless explicit reuse terms permit mirroring.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [artifact, photo, video, audio, oral_history, document]
+    priority: critical
+    estimated_item_count: 83000
+    notes: Museum states the permanent collection contains 83,000+ artifacts; only a growing subset is exposed through the public catalog.
+    enabled: true
+
+  - id: smithsonian-nmah-september11
+    name: Smithsonian National Museum of American History - National September 11 Collection
+    type: museum_collection
+    homepage_url: https://americanhistory.si.edu/collections/object-groups/september-11
+    photo_url: https://americanhistory.si.edu/collections/object-groups/september-11/photographs
+    access_method: web_catalog
+    public_access: true
+    rights_status: item_specific_review_required
+    rights_notes: Preserve Smithsonian object identifiers and per-record usage/rights metadata. Do not infer image reuse rights from public display.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [artifact, photo, document]
+    priority: high
+    estimated_item_count: 2400
+    notes: The museum describes more than 2,400 photographic objects in its September 11 Photographic History Collection and 600+ artifacts in the broader collection.
+    enabled: true
+
+  - id: internet-archive-understanding-911
+    name: Internet Archive - Understanding 9/11 Television News Archive
+    type: media_archive
+    homepage_url: https://archive.org/details/911
+    access_method: internet_archive_web_and_metadata_api
+    public_access: true
+    rights_status: item_specific_review_required
+    rights_notes: Preserve Internet Archive item metadata and any embedded license/access fields. Public streaming does not automatically grant redistribution rights.
+    metadata_quality: medium_high
+    ingest_mode: metadata_first
+    media_types: [video, television_broadcast]
+    priority: critical
+    estimated_item_count: null
+    enabled: true
+
+  - id: navy-ar670-pentagon-oral-histories
+    name: Naval History and Heritage Command - AR/670 9/11 Pentagon Attack Collection
+    type: government_oral_history
+    homepage_url: https://www.history.navy.mil/research/archives/Collections/ncdu-det-206/2001/9-11-pentagon-attack.html
+    access_method: web_pages_and_pdf_transcripts
+    public_access: partial
+    rights_status: public_release_with_item_specific_review
+    rights_notes: Only interviews authorized for public release should be ingested. Preserve redactions and Navy collection identifiers. Do not reconstruct redacted material.
+    metadata_quality: high
+    ingest_mode: metadata_and_transcript
+    media_types: [oral_history, transcript, audio, photo]
+    priority: high
+    estimated_item_count: null
+    enabled: true
+
+  - id: columbia-911-oral-history
+    name: Columbia University September 11, 2001 Oral History Project
+    type: university_oral_history
+    homepage_url: https://www.ccohr.incite.columbia.edu/911-oral-history-project
+    project_url: https://www.incite.columbia.edu/projects/september-11-2001-oral-histories
+    access_method: web_and_archive_access
+    public_access: partial
+    rights_status: review_required
+    rights_notes: Public research access is distinct from redistribution rights. Index interview metadata and availability; mirror transcripts/audio only where terms explicitly allow it.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [oral_history, audio, video, transcript]
+    priority: critical
+    estimated_item_count: 351
+    notes: Columbia reports 687 publicly available interview-hours with 351 individuals out of a larger 900-hour / 600+ person project.
+    enabled: true
+
+  - id: voices-of-911
+    name: Voices of 9.11
+    type: oral_history_collection
+    homepage_url: https://hereisnewyorkv911.org/
+    archive_url: https://www.911digitalarchive.org/collections/show/267
+    access_method: web_and_archive_collection
+    public_access: true
+    rights_status: review_required
+    rights_notes: Index testimony metadata and participant names while preserving collection attribution; media reuse should follow the collection's applicable rights terms.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [video, oral_history]
+    priority: high
+    estimated_item_count: 500
+    notes: Collection describes over 500 participant-controlled video testimonies recorded in 2002-2003.
+    enabled: true
