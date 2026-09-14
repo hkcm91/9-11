@@ -7,36 +7,35 @@ from archive.adapters.september11digital import (
 )
 
 
-SAMPLE_ITEM = {
+SAMPLE_ENUM_ITEM = {
     "id": 12345,
     "collection_id": 267,
     "added": "2004-01-01T12:00:00+00:00",
-    "element_texts": [
-        {"element": {"name": "Title"}, "text": "A sample title"},
-        {"element": {"name": "Creator"}, "text": "Jane Doe"},
-        {"element": {"name": "Description"}, "text": "Original source description"},
-        {"element": {"name": "Date"}, "text": "2001-09-11"},
-        {"element": {"name": "Coverage"}, "text": "Lower Manhattan"},
-        {"element": {"name": "Rights"}, "text": "Rights statement from source"},
-    ],
 }
 
+SAMPLE_DCMES = b'''<?xml version="1.0" encoding="UTF-8"?>
+<oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+ xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:title>A sample title</dc:title>
+  <dc:creator>Jane Doe</dc:creator>
+  <dc:description>Original source description</dc:description>
+  <dc:date>2001-09-11</dc:date>
+  <dc:coverage>Lower Manhattan</dc:coverage>
+  <dc:rights>Rights statement from source</dc:rights>
+  <dc:type>moving image</dc:type>
+</oai_dc:dc>'''
 
-def test_normalize_preserves_raw_payload() -> None:
+
+def test_normalize_preserves_live_enumeration_metadata() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
-    item = adapter.normalize(SAMPLE_ITEM)
+    item = adapter.normalize(SAMPLE_ENUM_ITEM)
 
     assert item.id == f"{SOURCE_ID}:12345"
     assert item.source_item_id == "12345"
     assert item.source_url.endswith("/items/show/12345")
-    assert item.title_raw == "A sample title"
-    assert item.creator_raw == "Jane Doe"
-    assert item.description_raw == "Original source description"
-    assert item.date_raw == "2001-09-11"
-    assert item.location_raw == "Lower Manhattan"
-    assert item.rights_raw == "Rights statement from source"
+    assert item.date_raw == "2004-01-01T12:00:00+00:00"
     assert item.collection_raw == "267"
-    assert item.metadata_raw is SAMPLE_ITEM
+    assert item.metadata_raw is SAMPLE_ENUM_ITEM
 
 
 def test_fetch_browse_page_accepts_current_omeka_envelope(monkeypatch) -> None:
@@ -58,28 +57,49 @@ def test_fetch_browse_page_accepts_current_omeka_envelope(monkeypatch) -> None:
     assert rows[0]["collection_id"] == 267
 
 
-def test_normalize_falls_back_to_top_level_fields() -> None:
+def test_fetch_dcmes_parses_repeating_dublin_core_fields(monkeypatch) -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
-    item = adapter.normalize(
-        {
-            "id": 7,
-            "title": "Fallback title",
-            "creator": "Fallback creator",
-            "added": "2005-02-03",
-        }
+    monkeypatch.setattr(adapter, "_get_bytes", lambda *args, **kwargs: SAMPLE_DCMES)
+
+    values = adapter.fetch_dcmes(12345)
+    assert values["title"] == ["A sample title"]
+    assert values["creator"] == ["Jane Doe"]
+    assert values["type"] == ["moving image"]
+
+
+def test_enrich_promotes_descriptive_fields_but_preserves_raw_enumeration(monkeypatch) -> None:
+    adapter = September11DigitalArchiveAdapter(request_delay_s=0)
+    base = adapter.normalize(SAMPLE_ENUM_ITEM)
+    monkeypatch.setattr(
+        adapter,
+        "fetch_dcmes",
+        lambda item_id: {
+            "title": ["A sample title"],
+            "creator": ["Jane Doe"],
+            "description": ["Original source description"],
+            "date": ["2001-09-11"],
+            "coverage": ["Lower Manhattan"],
+            "rights": ["Rights statement from source"],
+        },
     )
 
-    assert item.title_raw == "Fallback title"
-    assert item.creator_raw == "Fallback creator"
-    assert item.date_raw == "2005-02-03"
-    assert item.source_url.endswith("/items/show/7")
+    item = adapter.enrich(base)
+    assert item.title_raw == "A sample title"
+    assert item.creator_raw == "Jane Doe"
+    assert item.description_raw == "Original source description"
+    # Enumeration date is retained rather than silently overwritten.
+    assert item.date_raw == "2004-01-01T12:00:00+00:00"
+    assert item.location_raw == "Lower Manhattan"
+    assert item.rights_raw == "Rights statement from source"
+    assert item.metadata_raw["_dcmes"]["title"] == ["A sample title"]
+    assert base.metadata_raw is SAMPLE_ENUM_ITEM
 
 
 def test_missing_stable_id_is_rejected() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
 
     try:
-        adapter.normalize({"element_texts": []})
+        adapter.normalize({})
     except AdapterError as exc:
         assert "stable id" in str(exc)
     else:
@@ -104,7 +124,7 @@ def test_iter_items_stops_at_limit_without_extra_pages(monkeypatch) -> None:
 
 def test_serialize_source_item_makes_timestamp_json_safe() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
-    item = adapter.normalize(SAMPLE_ITEM)
+    item = adapter.normalize(SAMPLE_ENUM_ITEM)
 
     payload = adapter.serialize_source_item(item)
 
