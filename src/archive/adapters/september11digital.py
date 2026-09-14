@@ -174,6 +174,14 @@ class September11DigitalArchiveAdapter:
         item_id = item.get("id")
         return f"{base_url}/items/show/{item_id}" if item_id is not None else f"{base_url}/items/browse"
 
+    @staticmethod
+    def _collection_value(item: dict[str, Any]) -> str | None:
+        collection = item.get("collection")
+        if isinstance(collection, dict):
+            label = collection.get("name") or collection.get("title") or collection.get("id")
+            return _coerce_str(label)
+        return _coerce_str(collection)
+
     def normalize(self, item: dict[str, Any]) -> SourceItem:
         item_id = item.get("id")
         if item_id is None:
@@ -204,6 +212,7 @@ class September11DigitalArchiveAdapter:
             date_raw=date,
             location_raw=location,
             rights_raw=rights,
+            collection_raw=self._collection_value(item),
             metadata_raw=item,
             ingested_at=datetime.now(timezone.utc),
         )
