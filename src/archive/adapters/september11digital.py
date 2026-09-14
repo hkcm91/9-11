@@ -24,12 +24,14 @@ class AdapterError(RuntimeError):
 
 
 class September11DigitalArchiveAdapter:
-    """Metadata-only adapter for the September 11 Digital Archive.
+    """Metadata-first adapter for the September 11 Digital Archive.
 
-    The archive is an Omeka site whose item browser advertises JSON output.
-    This adapter intentionally does not download item media. It retrieves only
-    browse/item metadata and preserves the complete source payload on every
-    SourceItem in ``metadata_raw``.
+    The archive's current Omeka browse JSON is a lightweight enumeration feed:
+    ``{"items": [...], "total_results": N}``. It is useful for stable item IDs,
+    collection IDs, and ingest timestamps, but does not expose all descriptive
+    fields shown in the HTML item pages. We preserve that limitation instead of
+    inventing missing metadata; richer descriptive extraction is a separate
+    adapter stage.
     """
 
     def __init__(
@@ -71,7 +73,7 @@ class September11DigitalArchiveAdapter:
         try:
             with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - fixed public source
                 body = response.read().decode("utf-8")
-        except Exception as exc:  # urllib exposes several transport exceptions
+        except Exception as exc:
             raise AdapterError(f"failed to fetch {url}: {exc}") from exc
         finally:
             self._last_request_at = time.monotonic()
@@ -102,8 +104,10 @@ class September11DigitalArchiveAdapter:
                 "per_page": per_page,
             },
         )
+        if isinstance(payload, dict):
+            payload = payload.get("items")
         if not isinstance(payload, list):
-            raise AdapterError("expected the Omeka browse JSON output to be a list")
+            raise AdapterError("expected Omeka browse JSON items list")
         return [item for item in payload if isinstance(item, dict)]
 
     def iter_items(
@@ -168,9 +172,6 @@ class September11DigitalArchiveAdapter:
 
     @staticmethod
     def _source_url(item: dict[str, Any], base_url: str) -> str:
-        raw_url = item.get("url")
-        if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
-            return raw_url
         item_id = item.get("id")
         return f"{base_url}/items/show/{item_id}" if item_id is not None else f"{base_url}/items/browse"
 
@@ -180,7 +181,9 @@ class September11DigitalArchiveAdapter:
         if isinstance(collection, dict):
             label = collection.get("name") or collection.get("title") or collection.get("id")
             return _coerce_str(label)
-        return _coerce_str(collection)
+        if collection is not None:
+            return _coerce_str(collection)
+        return _coerce_str(item.get("collection_id"))
 
     def normalize(self, item: dict[str, Any]) -> SourceItem:
         item_id = item.get("id")
@@ -188,18 +191,12 @@ class September11DigitalArchiveAdapter:
             raise AdapterError("Omeka item is missing its stable id")
 
         elements = self._element_values(item)
-        title = self._first(elements, "title")
+        title = self._first(elements, "title") or _coerce_str(item.get("title"))
         description = self._first(elements, "description", "abstract")
-        creator = self._first(elements, "creator", "contributor")
-        date = self._first(elements, "date")
+        creator = self._first(elements, "creator", "contributor") or _coerce_str(item.get("creator"))
+        date = self._first(elements, "date") or _coerce_str(item.get("date")) or _coerce_str(item.get("added"))
         location = self._first(elements, "spatial coverage", "coverage")
         rights = self._first(elements, "rights")
-
-        # Some Omeka exports expose useful fields at top level. We only use
-        # these as fallbacks; the untouched payload remains metadata_raw.
-        title = title or _coerce_str(item.get("title"))
-        creator = creator or _coerce_str(item.get("creator"))
-        date = date or _coerce_str(item.get("date")) or _coerce_str(item.get("added"))
 
         return SourceItem(
             id=f"{SOURCE_ID}:{item_id}",
@@ -220,10 +217,7 @@ class September11DigitalArchiveAdapter:
     def sample(self, *, limit: int = 50, collection_id: int | None = None) -> list[SourceItem]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
-        return [
-            self.normalize(item)
-            for item in self.iter_items(collection_id=collection_id, max_items=limit)
-        ]
+        return [self.normalize(item) for item in self.iter_items(collection_id=collection_id, max_items=limit)]
 
     @staticmethod
     def serialize_source_item(item: SourceItem) -> dict[str, Any]:
