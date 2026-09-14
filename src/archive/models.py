@@ -33,9 +33,11 @@ class SourceItem:
     description_raw: str | None = None
     creator_raw: str | None = None
     date_raw: str | None = None
+    archive_added_raw: str | None = None
     location_raw: str | None = None
     rights_raw: str | None = None
     collection_raw: str | None = None
+    media_type_raw: str | None = None
     metadata_raw: dict[str, Any] = field(default_factory=dict)
     ingested_at: datetime = field(default_factory=datetime.utcnow)
 
