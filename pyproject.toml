@@ -3,7 +3,7 @@ name = "nine-eleven-archive"
 version = "0.1.0"
 description = "Research pipeline and API skeleton for a provenance-first September 11 interactive archive"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["PyYAML>=6.0"]
 
 [project.scripts]
 archive-ingest = "archive.cli:main"
