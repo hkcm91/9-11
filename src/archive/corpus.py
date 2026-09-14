@@ -23,9 +23,11 @@ def source_item_from_dict(payload: dict) -> SourceItem:
         description_raw=payload.get("description_raw"),
         creator_raw=payload.get("creator_raw"),
         date_raw=payload.get("date_raw"),
+        archive_added_raw=payload.get("archive_added_raw"),
         location_raw=payload.get("location_raw"),
         rights_raw=payload.get("rights_raw"),
         collection_raw=payload.get("collection_raw"),
+        media_type_raw=payload.get("media_type_raw"),
         metadata_raw=payload.get("metadata_raw") or {},
         ingested_at=ingested_at,
     )
