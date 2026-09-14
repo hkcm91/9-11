@@ -12,9 +12,11 @@ FIELDS = (
     "description_raw",
     "creator_raw",
     "date_raw",
+    "archive_added_raw",
     "location_raw",
     "rights_raw",
     "collection_raw",
+    "media_type_raw",
 )
 
 
@@ -23,6 +25,7 @@ class CorpusProfile:
     total_records: int
     source_counts: dict[str, int]
     collection_counts: dict[str, int]
+    media_type_counts: dict[str, int]
     populated_counts: dict[str, int]
     populated_percent: dict[str, float]
     raw_metadata_keys: dict[str, int]
@@ -36,6 +39,7 @@ def profile_records(records: Iterable[SourceItem]) -> CorpusProfile:
     total = len(rows)
     source_counts = Counter(item.source_id for item in rows)
     collection_counts = Counter(item.collection_raw for item in rows if item.collection_raw)
+    media_type_counts = Counter(item.media_type_raw for item in rows if item.media_type_raw)
     populated = Counter()
     raw_keys = Counter()
 
@@ -56,6 +60,7 @@ def profile_records(records: Iterable[SourceItem]) -> CorpusProfile:
         total_records=total,
         source_counts=dict(source_counts.most_common()),
         collection_counts=dict(collection_counts.most_common()),
+        media_type_counts=dict(media_type_counts.most_common()),
         populated_counts={field: populated[field] for field in FIELDS},
         populated_percent=percentages,
         raw_metadata_keys=dict(raw_keys.most_common()),
