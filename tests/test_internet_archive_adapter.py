@@ -17,6 +17,7 @@ def test_normalize_preserves_metadata() -> None:
         "description": "Archive description",
         "licenseurl": "https://creativecommons.org/licenses/by/4.0/",
         "mediatype": "movies",
+        "collection": ["911", "tvarchive", "fav-example"],
     }
 
     item = adapter.normalize(raw)
@@ -27,8 +28,20 @@ def test_normalize_preserves_metadata() -> None:
     assert item.creator_raw == "Sample Network"
     assert item.date_raw == "2001-09-11"
     assert item.rights_raw == "https://creativecommons.org/licenses/by/4.0/"
-    assert item.metadata_raw is raw
+    assert item.collection_raw == "911"
+    assert item.metadata_raw["collection"] == ["911", "tvarchive", "fav-example"]
     assert item.source_url.endswith("/details/sample-item")
+
+
+def test_configured_collection_is_lineage_even_with_auxiliary_memberships() -> None:
+    adapter = InternetArchiveAdapter(collection="TV-NHK", request_delay_s=0)
+    item = adapter.normalize(
+        {
+            "identifier": "x",
+            "collection": ["TV-NHK", "911", "tvarchive", "fav-someone"],
+        }
+    )
+    assert item.collection_raw == "TV-NHK"
 
 
 def test_list_values_are_joined() -> None:
