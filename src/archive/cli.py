@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from archive.adapters import InternetArchiveAdapter, September11DigitalArchiveAdapter
+from archive.corpus import load_jsonl
+from archive.dedupe import find_candidates
+from archive.profiling import profile_records
 from archive.registry import enabled_sources
 
 
@@ -34,6 +38,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sources = subparsers.add_parser("list-sources", help="List enabled Phase 0 sources")
     sources.add_argument("--registry", type=Path, default=Path("config/sources.phase0.yaml"))
+
+    profile = subparsers.add_parser("profile-jsonl", help="Profile metadata coverage in one or more JSONL corpora")
+    profile.add_argument("inputs", nargs="+", type=Path)
+    profile.add_argument("--output", type=Path, default=None)
+
+    dedupe = subparsers.add_parser("dedupe-jsonl", help="Propose likely duplicate records without merging them")
+    dedupe.add_argument("inputs", nargs="+", type=Path)
+    dedupe.add_argument("--threshold", type=float, default=0.86)
+    dedupe.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -43,6 +56,13 @@ def _write_jsonl(output: Path, records: list, serializer) -> None:
         for record in records:
             handle.write(json.dumps(serializer(record), ensure_ascii=False))
             handle.write("\n")
+
+
+def _load_many(paths: list[Path]):
+    records = []
+    for path in paths:
+        records.extend(load_jsonl(path))
+    return records
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,6 +87,25 @@ def main(argv: list[str] | None = None) -> int:
         for source in sources:
             print(f"{source.priority.upper():8} {source.id:40} {source.name}")
         print(f"{len(sources)} enabled sources")
+        return 0
+
+    if args.command == "profile-jsonl":
+        records = _load_many(args.inputs)
+        payload = profile_records(records).to_dict()
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+            print(f"wrote profile for {len(records)} records to {args.output}")
+        else:
+            print(rendered)
+        return 0
+
+    if args.command == "dedupe-jsonl":
+        records = _load_many(args.inputs)
+        candidates = find_candidates(records, threshold=args.threshold)
+        _write_jsonl(args.output, candidates, asdict)
+        print(f"wrote {len(candidates)} duplicate candidates to {args.output}")
         return 0
 
     return 2
