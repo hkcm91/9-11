@@ -10,7 +10,8 @@ from archive.adapters.september11digital import (
 SAMPLE_ENUM_ITEM = {
     "id": 12345,
     "collection_id": 267,
-    "added": "2004-01-01T12:00:00+00:00",
+    "item_type_id": 30,
+    "added": "2014-01-16 12:31:31",
 }
 
 SAMPLE_DCMES = b'''<?xml version="1.0" encoding="UTF-8"?>
@@ -33,8 +34,10 @@ def test_normalize_preserves_live_enumeration_metadata() -> None:
     assert item.id == f"{SOURCE_ID}:12345"
     assert item.source_item_id == "12345"
     assert item.source_url.endswith("/items/show/12345")
-    assert item.date_raw == "2004-01-01T12:00:00+00:00"
+    assert item.date_raw is None
+    assert item.archive_added_raw == "2014-01-16 12:31:31"
     assert item.collection_raw == "267"
+    assert item.media_type_raw == "item_type_id:30"
     assert item.metadata_raw is SAMPLE_ENUM_ITEM
 
 
@@ -44,14 +47,10 @@ def test_fetch_browse_page_accepts_current_omeka_envelope(monkeypatch) -> None:
         adapter,
         "_get_json",
         lambda *args, **kwargs: {
-            "items": [
-                {"id": 96746, "collection_id": 267},
-                {"id": 96745, "collection_id": 267},
-            ],
+            "items": [{"id": 96746, "collection_id": 267}, {"id": 96745, "collection_id": 267}],
             "total_results": 517,
         },
     )
-
     rows = adapter.fetch_browse_page(collection_id=267)
     assert [row["id"] for row in rows] == [96746, 96745]
     assert rows[0]["collection_id"] == 267
@@ -60,14 +59,13 @@ def test_fetch_browse_page_accepts_current_omeka_envelope(monkeypatch) -> None:
 def test_fetch_dcmes_parses_repeating_dublin_core_fields(monkeypatch) -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
     monkeypatch.setattr(adapter, "_get_bytes", lambda *args, **kwargs: SAMPLE_DCMES)
-
     values = adapter.fetch_dcmes(12345)
     assert values["title"] == ["A sample title"]
     assert values["creator"] == ["Jane Doe"]
     assert values["type"] == ["moving image"]
 
 
-def test_enrich_promotes_descriptive_fields_but_preserves_raw_enumeration(monkeypatch) -> None:
+def test_enrich_promotes_historical_date_without_overwriting_archive_added(monkeypatch) -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
     base = adapter.normalize(SAMPLE_ENUM_ITEM)
     monkeypatch.setattr(
@@ -80,6 +78,7 @@ def test_enrich_promotes_descriptive_fields_but_preserves_raw_enumeration(monkey
             "date": ["2001-09-11"],
             "coverage": ["Lower Manhattan"],
             "rights": ["Rights statement from source"],
+            "type": ["moving image"],
         },
     )
 
@@ -87,17 +86,17 @@ def test_enrich_promotes_descriptive_fields_but_preserves_raw_enumeration(monkey
     assert item.title_raw == "A sample title"
     assert item.creator_raw == "Jane Doe"
     assert item.description_raw == "Original source description"
-    # Enumeration date is retained rather than silently overwritten.
-    assert item.date_raw == "2004-01-01T12:00:00+00:00"
+    assert item.date_raw == "2001-09-11"
+    assert item.archive_added_raw == "2014-01-16 12:31:31"
     assert item.location_raw == "Lower Manhattan"
     assert item.rights_raw == "Rights statement from source"
+    assert item.media_type_raw == "moving image"
     assert item.metadata_raw["_dcmes"]["title"] == ["A sample title"]
     assert base.metadata_raw is SAMPLE_ENUM_ITEM
 
 
 def test_missing_stable_id_is_rejected() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
-
     try:
         adapter.normalize({})
     except AdapterError as exc:
@@ -115,9 +114,7 @@ def test_iter_items_stops_at_limit_without_extra_pages(monkeypatch) -> None:
         return [{"id": page * 10 + i} for i in range(5)]
 
     monkeypatch.setattr(adapter, "fetch_browse_page", fake_fetch)
-
     items = list(adapter.iter_items(max_items=7))
-
     assert len(items) == 7
     assert calls == [1, 2]
 
@@ -125,8 +122,6 @@ def test_iter_items_stops_at_limit_without_extra_pages(monkeypatch) -> None:
 def test_serialize_source_item_makes_timestamp_json_safe() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
     item = adapter.normalize(SAMPLE_ENUM_ITEM)
-
     payload = adapter.serialize_source_item(item)
-
     assert isinstance(payload["ingested_at"], str)
     assert payload["metadata_raw"]["id"] == 12345
