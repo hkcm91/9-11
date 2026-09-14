@@ -153,6 +153,7 @@ class InternetArchiveAdapter:
             creator_raw=self._string(item.get("creator")),
             date_raw=self._string(item.get("date")) or self._string(item.get("publicdate")),
             rights_raw=rights,
+            collection_raw=self._string(item.get("collection")) or self.collection,
             metadata_raw=item,
             ingested_at=datetime.now(timezone.utc),
         )
