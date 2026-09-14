@@ -10,13 +10,9 @@ from urllib.request import Request, urlopen
 
 from archive.models import SourceItem
 
-
 SOURCE_ID = "internet-archive-understanding-911"
 DEFAULT_BASE_URL = "https://archive.org"
-DEFAULT_USER_AGENT = (
-    "nine-eleven-archive/0.1 metadata-research; "
-    "contact=https://github.com/hkcm91/9-11"
-)
+DEFAULT_USER_AGENT = "nine-eleven-archive/0.1 metadata-research; contact=https://github.com/hkcm91/9-11"
 
 
 class InternetArchiveAdapterError(RuntimeError):
@@ -24,23 +20,9 @@ class InternetArchiveAdapterError(RuntimeError):
 
 
 class InternetArchiveAdapter:
-    """Metadata-only adapter for Internet Archive search and item metadata.
-
-    Defaults to the `911` collection used by the Understanding 9/11 television
-    news archive. Internet Archive records may belong to many auxiliary/favorite
-    collections; those remain in metadata_raw while collection_raw records the
-    canonical collection intentionally queried by this adapter.
-    """
-
-    def __init__(
-        self,
-        *,
-        collection: str = "911",
-        base_url: str = DEFAULT_BASE_URL,
-        user_agent: str = DEFAULT_USER_AGENT,
-        request_delay_s: float = 0.5,
-        timeout_s: float = 30.0,
-    ) -> None:
+    def __init__(self, *, collection: str = "911", base_url: str = DEFAULT_BASE_URL,
+                 user_agent: str = DEFAULT_USER_AGENT, request_delay_s: float = 0.5,
+                 timeout_s: float = 30.0) -> None:
         self.collection = collection
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
@@ -63,7 +45,7 @@ class InternetArchiveAdapter:
             url = f"{url}?{query}"
         req = Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
         try:
-            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - fixed public source
+            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310
                 body = response.read().decode("utf-8")
         except Exception as exc:
             raise InternetArchiveAdapterError(f"failed to fetch {url}: {exc}") from exc
@@ -79,27 +61,12 @@ class InternetArchiveAdapter:
             raise ValueError("page must be >= 1")
         if rows < 1 or rows > 1000:
             raise ValueError("rows must be between 1 and 1000")
-        payload = self._get_json(
-            "/advancedsearch.php",
-            {
-                "q": f"collection:{self.collection}",
-                "fl[]": [
-                    "identifier",
-                    "title",
-                    "creator",
-                    "date",
-                    "description",
-                    "rights",
-                    "licenseurl",
-                    "mediatype",
-                    "collection",
-                    "publicdate",
-                ],
-                "rows": rows,
-                "page": page,
-                "output": "json",
-            },
-        )
+        payload = self._get_json("/advancedsearch.php", {
+            "q": f"collection:{self.collection}",
+            "fl[]": ["identifier", "title", "creator", "date", "description", "rights",
+                     "licenseurl", "mediatype", "collection", "publicdate"],
+            "rows": rows, "page": page, "output": "json",
+        })
         response = payload.get("response") if isinstance(payload, dict) else None
         docs = response.get("docs") if isinstance(response, dict) else None
         if not isinstance(docs, list):
@@ -153,9 +120,11 @@ class InternetArchiveAdapter:
             title_raw=self._string(item.get("title")),
             description_raw=self._string(item.get("description")),
             creator_raw=self._string(item.get("creator")),
-            date_raw=self._string(item.get("date")) or self._string(item.get("publicdate")),
+            date_raw=self._string(item.get("date")),
+            archive_added_raw=self._string(item.get("publicdate")),
             rights_raw=rights,
             collection_raw=self.collection,
+            media_type_raw=self._string(item.get("mediatype")),
             metadata_raw=item,
             ingested_at=datetime.now(timezone.utc),
         )
