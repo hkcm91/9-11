@@ -28,19 +28,13 @@ class AdapterError(RuntimeError):
 class September11DigitalArchiveAdapter:
     """Metadata-first adapter for the September 11 Digital Archive.
 
-    The current browse JSON is a lightweight enumeration feed. Richer
+    Browse JSON is used only to enumerate stable IDs/collection IDs. Richer
     descriptive metadata is fetched on demand through each item's DCMES XML
-    export, avoiding brittle HTML scraping and avoiding bulk media downloads.
+    export. Archive import timestamps remain separate from historical dates.
     """
 
-    def __init__(
-        self,
-        *,
-        base_url: str = DEFAULT_BASE_URL,
-        user_agent: str = DEFAULT_USER_AGENT,
-        request_delay_s: float = 1.0,
-        timeout_s: float = 30.0,
-    ) -> None:
+    def __init__(self, *, base_url: str = DEFAULT_BASE_URL, user_agent: str = DEFAULT_USER_AGENT,
+                 request_delay_s: float = 1.0, timeout_s: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
         self.request_delay_s = request_delay_s
@@ -54,13 +48,7 @@ class September11DigitalArchiveAdapter:
         if remaining > 0:
             time.sleep(remaining)
 
-    def _get_bytes(
-        self,
-        path: str,
-        params: dict[str, Any] | None = None,
-        *,
-        accept: str = "*/*",
-    ) -> bytes:
+    def _get_bytes(self, path: str, params: dict[str, Any] | None = None, *, accept: str = "*/*") -> bytes:
         self._throttle()
         query = urlencode({k: v for k, v in (params or {}).items() if v is not None})
         url = f"{self.base_url}{path}"
@@ -68,7 +56,7 @@ class September11DigitalArchiveAdapter:
             url = f"{url}?{query}"
         req = Request(url, headers={"User-Agent": self.user_agent, "Accept": accept})
         try:
-            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - fixed public source
+            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310
                 return response.read()
         except Exception as exc:
             raise AdapterError(f"failed to fetch {url}: {exc}") from exc
@@ -82,36 +70,22 @@ class September11DigitalArchiveAdapter:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise AdapterError(f"source did not return valid JSON for {path}") from exc
 
-    def fetch_browse_page(
-        self,
-        *,
-        page: int = 1,
-        collection_id: int | None = None,
-        per_page: int | None = None,
-    ) -> list[dict[str, Any]]:
+    def fetch_browse_page(self, *, page: int = 1, collection_id: int | None = None,
+                          per_page: int | None = None) -> list[dict[str, Any]]:
         if page < 1:
             raise ValueError("page must be >= 1")
-        if per_page is not None and per_page < 1:
-            raise ValueError("per_page must be >= 1")
-        payload = self._get_json(
-            "/items/browse",
-            {"output": "json", "page": page, "collection": collection_id, "per_page": per_page},
-        )
+        payload = self._get_json("/items/browse", {
+            "output": "json", "page": page, "collection": collection_id, "per_page": per_page,
+        })
         if isinstance(payload, dict):
             payload = payload.get("items")
         if not isinstance(payload, list):
             raise AdapterError("expected Omeka browse JSON items list")
         return [item for item in payload if isinstance(item, dict)]
 
-    def iter_items(
-        self,
-        *,
-        collection_id: int | None = None,
-        start_page: int = 1,
-        max_items: int | None = None,
-        per_page: int | None = None,
-        max_pages: int | None = None,
-    ) -> Iterable[dict[str, Any]]:
+    def iter_items(self, *, collection_id: int | None = None, start_page: int = 1,
+                   max_items: int | None = None, per_page: int | None = None,
+                   max_pages: int | None = None) -> Iterable[dict[str, Any]]:
         emitted = 0
         page = start_page
         pages_seen = 0
@@ -130,21 +104,14 @@ class September11DigitalArchiveAdapter:
             page += 1
 
     def fetch_dcmes(self, item_id: str | int) -> dict[str, list[str]]:
-        """Fetch a single item's Dublin Core XML metadata.
-
-        Values remain lists because Dublin Core fields may repeat. No value is
-        silently collapsed at the raw enrichment layer.
-        """
         body = self._get_bytes(
-            f"/items/show/{item_id}",
-            {"output": "dcmes-xml"},
+            f"/items/show/{item_id}", {"output": "dcmes-xml"},
             accept="application/rdf+xml,application/xml,text/xml;q=0.9,*/*;q=0.1",
         )
         try:
             root = ET.fromstring(body)
         except ET.ParseError as exc:
             raise AdapterError(f"invalid DCMES XML for item {item_id}") from exc
-
         values: dict[str, list[str]] = {}
         for element in root.iter():
             if not isinstance(element.tag, str) or not element.tag.startswith(f"{{{DC_NAMESPACE}}}"):
@@ -164,11 +131,6 @@ class September11DigitalArchiveAdapter:
         return None
 
     @staticmethod
-    def _source_url(item: dict[str, Any], base_url: str) -> str:
-        item_id = item.get("id")
-        return f"{base_url}/items/show/{item_id}" if item_id is not None else f"{base_url}/items/browse"
-
-    @staticmethod
     def _collection_value(item: dict[str, Any]) -> str | None:
         collection = item.get("collection")
         if isinstance(collection, dict):
@@ -186,11 +148,13 @@ class September11DigitalArchiveAdapter:
             id=f"{SOURCE_ID}:{item_id}",
             source_id=SOURCE_ID,
             source_item_id=str(item_id),
-            source_url=self._source_url(item, self.base_url),
+            source_url=f"{self.base_url}/items/show/{item_id}",
             title_raw=_coerce_str(item.get("title")),
             creator_raw=_coerce_str(item.get("creator")),
-            date_raw=_coerce_str(item.get("date")) or _coerce_str(item.get("added")),
+            date_raw=_coerce_str(item.get("date")),
+            archive_added_raw=_coerce_str(item.get("added")),
             collection_raw=self._collection_value(item),
+            media_type_raw=(f"item_type_id:{item['item_type_id']}" if item.get("item_type_id") is not None else None),
             metadata_raw=item,
             ingested_at=datetime.now(timezone.utc),
         )
@@ -207,16 +171,12 @@ class September11DigitalArchiveAdapter:
             date_raw=item.date_raw or self._first_map(dc, "date"),
             location_raw=item.location_raw or self._first_map(dc, "coverage"),
             rights_raw=item.rights_raw or self._first_map(dc, "rights"),
+            media_type_raw=(self._first_map(dc, "type") or item.media_type_raw),
             metadata_raw=metadata,
         )
 
-    def sample(
-        self,
-        *,
-        limit: int = 50,
-        collection_id: int | None = None,
-        enrich: bool = False,
-    ) -> list[SourceItem]:
+    def sample(self, *, limit: int = 50, collection_id: int | None = None,
+               enrich: bool = False) -> list[SourceItem]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
         records = [self.normalize(item) for item in self.iter_items(collection_id=collection_id, max_items=limit)]
