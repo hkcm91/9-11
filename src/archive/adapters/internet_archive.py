@@ -27,7 +27,9 @@ class InternetArchiveAdapter:
     """Metadata-only adapter for Internet Archive search and item metadata.
 
     Defaults to the `911` collection used by the Understanding 9/11 television
-    news archive. The adapter does not download media files.
+    news archive. Internet Archive records may belong to many auxiliary/favorite
+    collections; those remain in metadata_raw while collection_raw records the
+    canonical collection intentionally queried by this adapter.
     """
 
     def __init__(
@@ -153,7 +155,7 @@ class InternetArchiveAdapter:
             creator_raw=self._string(item.get("creator")),
             date_raw=self._string(item.get("date")) or self._string(item.get("publicdate")),
             rights_raw=rights,
-            collection_raw=self._string(item.get("collection")) or self.collection,
+            collection_raw=self.collection,
             metadata_raw=item,
             ingested_at=datetime.now(timezone.utc),
         )
