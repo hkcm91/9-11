@@ -25,6 +25,7 @@ def source_item_from_dict(payload: dict) -> SourceItem:
         date_raw=payload.get("date_raw"),
         location_raw=payload.get("location_raw"),
         rights_raw=payload.get("rights_raw"),
+        collection_raw=payload.get("collection_raw"),
         metadata_raw=payload.get("metadata_raw") or {},
         ingested_at=ingested_at,
     )
