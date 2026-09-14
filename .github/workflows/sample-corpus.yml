@@ -18,19 +18,25 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e .
-      - name: Collect September 11 Digital Archive metadata
+      - name: Collect Voices of 9.11 detailed metadata
         run: |
           mkdir -p artifacts/raw artifacts/reports
-          archive-ingest sample-911da --limit 100 --delay 0.25 --output artifacts/raw/911da.jsonl
+          archive-ingest sample-911da --collection 267 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-voices.jsonl
+      - name: Collect FDNY Incident Action Plan detailed metadata
+        run: |
+          archive-ingest sample-911da --collection 11 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-fdny-plans.jsonl
+      - name: Collect Sonic Memorial detailed metadata
+        run: |
+          archive-ingest sample-911da --collection 266 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-sonic-memorial.jsonl
       - name: Collect Internet Archive metadata
         run: |
           archive-ingest sample-internet-archive --limit 100 --delay 0.25 --output artifacts/raw/internet-archive.jsonl
       - name: Profile combined corpus
         run: |
-          archive-ingest profile-jsonl artifacts/raw/911da.jsonl artifacts/raw/internet-archive.jsonl --output artifacts/reports/profile.json
+          archive-ingest profile-jsonl artifacts/raw/*.jsonl --output artifacts/reports/profile.json
       - name: Propose duplicate candidates
         run: |
-          archive-ingest dedupe-jsonl artifacts/raw/911da.jsonl artifacts/raw/internet-archive.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
+          archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
       - name: Write manifest
         run: |
           python - <<'PY'
