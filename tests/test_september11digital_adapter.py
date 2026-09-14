@@ -9,7 +9,7 @@ from archive.adapters.september11digital import (
 
 SAMPLE_ITEM = {
     "id": 12345,
-    "url": "https://911digitalarchive.org/api/items/12345",
+    "collection_id": 267,
     "added": "2004-01-01T12:00:00+00:00",
     "element_texts": [
         {"element": {"name": "Title"}, "text": "A sample title"},
@@ -19,24 +19,43 @@ SAMPLE_ITEM = {
         {"element": {"name": "Coverage"}, "text": "Lower Manhattan"},
         {"element": {"name": "Rights"}, "text": "Rights statement from source"},
     ],
-    "files": {"count": 1, "url": "https://911digitalarchive.org/api/files?item=12345"},
 }
 
 
 def test_normalize_preserves_raw_payload() -> None:
     adapter = September11DigitalArchiveAdapter(request_delay_s=0)
-
     item = adapter.normalize(SAMPLE_ITEM)
 
     assert item.id == f"{SOURCE_ID}:12345"
     assert item.source_item_id == "12345"
+    assert item.source_url.endswith("/items/show/12345")
     assert item.title_raw == "A sample title"
     assert item.creator_raw == "Jane Doe"
     assert item.description_raw == "Original source description"
     assert item.date_raw == "2001-09-11"
     assert item.location_raw == "Lower Manhattan"
     assert item.rights_raw == "Rights statement from source"
+    assert item.collection_raw == "267"
     assert item.metadata_raw is SAMPLE_ITEM
+
+
+def test_fetch_browse_page_accepts_current_omeka_envelope(monkeypatch) -> None:
+    adapter = September11DigitalArchiveAdapter(request_delay_s=0)
+    monkeypatch.setattr(
+        adapter,
+        "_get_json",
+        lambda *args, **kwargs: {
+            "items": [
+                {"id": 96746, "collection_id": 267},
+                {"id": 96745, "collection_id": 267},
+            ],
+            "total_results": 517,
+        },
+    )
+
+    rows = adapter.fetch_browse_page(collection_id=267)
+    assert [row["id"] for row in rows] == [96746, 96745]
+    assert rows[0]["collection_id"] == 267
 
 
 def test_normalize_falls_back_to_top_level_fields() -> None:
