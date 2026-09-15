@@ -4,22 +4,23 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from archive.corpus import load_jsonl
 from archive.models import SourceItem
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ArchiveStore:
     """Small provenance-first SQLite store for Phase 0/1 research outputs.
 
-    Raw observations are append-only by content digest. `source_records` is a
-    convenience read model pointing at the richest normalized observation seen
-    for a stable source item. Claims remain separate from source metadata.
+    Raw source payloads and normalization outputs are both version-significant:
+    the same upstream JSON/XML may normalize differently after an adapter fix.
+    `source_records` is a convenience read model pointing at the richest
+    normalized observation seen for a stable item; observations stay preserved.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -75,9 +76,10 @@ class ArchiveStore:
                 source_item_id TEXT NOT NULL,
                 ingested_at TEXT NOT NULL,
                 raw_digest TEXT NOT NULL,
+                normalized_digest TEXT NOT NULL,
                 normalized_json TEXT NOT NULL,
                 metadata_json TEXT NOT NULL,
-                UNIQUE(record_id, raw_digest)
+                UNIQUE(record_id, raw_digest, normalized_digest)
             );
 
             CREATE TABLE IF NOT EXISTS temporal_claims (
@@ -131,6 +133,7 @@ class ArchiveStore:
             CREATE INDEX IF NOT EXISTS idx_source_records_source ON source_records(source_id);
             CREATE INDEX IF NOT EXISTS idx_source_records_date ON source_records(date_raw);
             CREATE INDEX IF NOT EXISTS idx_source_records_creator ON source_records(creator_raw);
+            CREATE INDEX IF NOT EXISTS idx_observations_record ON source_observations(record_id);
             CREATE INDEX IF NOT EXISTS idx_temporal_subject ON temporal_claims(subject_id);
             CREATE INDEX IF NOT EXISTS idx_temporal_time ON temporal_claims(start_time, end_time);
             CREATE INDEX IF NOT EXISTS idx_spatial_subject ON spatial_claims(subject_id);
@@ -180,7 +183,10 @@ class ArchiveStore:
         normalized = self._normalized_payload(item)
         normalized_json = self._json(normalized)
         raw_digest = hashlib.sha256(metadata_json.encode("utf-8")).hexdigest()
-        observation_id = hashlib.sha256(f"{item.id}|{raw_digest}".encode("utf-8")).hexdigest()
+        normalized_digest = hashlib.sha256(normalized_json.encode("utf-8")).hexdigest()
+        observation_id = hashlib.sha256(
+            f"{item.id}|{raw_digest}|{normalized_digest}".encode("utf-8")
+        ).hexdigest()
         richness = self._richness(item)
 
         existing = self.connection.execute(
@@ -234,12 +240,12 @@ class ArchiveStore:
             """
             INSERT OR IGNORE INTO source_observations(
                 observation_id, record_id, source_id, source_item_id,
-                ingested_at, raw_digest, normalized_json, metadata_json
-            ) VALUES(?,?,?,?,?,?,?,?)
+                ingested_at, raw_digest, normalized_digest, normalized_json, metadata_json
+            ) VALUES(?,?,?,?,?,?,?,?,?)
             """,
             (
                 observation_id, item.id, item.source_id, item.source_item_id,
-                seen_at, raw_digest, normalized_json, metadata_json,
+                seen_at, raw_digest, normalized_digest, normalized_json, metadata_json,
             ),
         )
 
@@ -269,7 +275,6 @@ class ArchiveStore:
         if kind not in {"temporal", "spatial", "entity"}:
             raise ValueError("kind must be temporal, spatial, or entity")
         count = 0
-        table = f"{kind}_claims"
         with path.open("r", encoding="utf-8") as handle, self.connection:
             for line_number, line in enumerate(handle, start=1):
                 line = line.strip()
