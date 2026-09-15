@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+import archive.adapters.nist_organized as nist_module
+
 from archive.adapters.nist_organized import (
     NistOrganizedMediaAdapter,
     entity_claim_from_nist_row,
     load_nist_organized_rows,
     normalize_nist_organized_row,
+    nist_inventory_report,
     parse_embedded_folder_html,
     spatial_claim_from_nist_row,
     temporal_claim_from_nist_row,
@@ -182,3 +187,80 @@ def test_manifest_loaders_preserve_unknown_columns(tmp_path: Path) -> None:
     json_path.write_text(json.dumps({"records": [{"Record Name": "clip.avi", "Other": 7}]}), encoding="utf-8")
     assert load_nist_organized_rows(csv_path)[0]["Unmapped Field"] == "verbatim"
     assert load_nist_organized_rows(json_path)[0]["Other"] == 7
+
+
+def test_complete_inventory_has_no_implicit_limit() -> None:
+    adapter = NistOrganizedMediaAdapter(folder_id="root", request_delay_s=0)
+    calls = []
+
+    def fake_inventory(*, limit, media_type):
+        calls.append((limit, media_type))
+        return [{"Record Name": "photo.jpg", "Drive File ID": "asset", "Media Type": "photo"}]
+
+    adapter.inventory_rows = fake_inventory  # type: ignore[method-assign]
+    records = adapter.inventory()
+    assert calls == [(None, None)]
+    assert [record.source_item_id for record in records] == ["asset"]
+
+
+def test_inventory_report_exposes_evidence_coverage_without_verifying_claims() -> None:
+    items = [
+        normalize_nist_organized_row({
+            "Record Name": "photo.jpg",
+            "Drive File ID": "photo-1",
+            "Media Type": "photo",
+            "Photographer": "Jane Example",
+            "Date Recorded": "09/11/2001 09:58:20",
+            "Latitude": "40.711",
+            "Longitude": "-74.013",
+            "Rights": "Credit Jane Example",
+            "source_group": "Jane Example",
+            "folder_path": ["Photos", "Jane Example"],
+        }),
+        normalize_nist_organized_row({
+            "Record Name": "clip.avi",
+            "Drive File ID": "video-1",
+            "Media Type": "video",
+            "source_group": "Agency",
+            "folder_path": ["VideoClips", "Agency"],
+        }),
+    ]
+
+    report = nist_inventory_report(items)
+    assert report["records"] == 2
+    assert report["media_type_counts"] == {"photo": 1, "video": 1}
+    assert report["field_coverage"] == {
+        "timing": 1,
+        "explicit_coordinates": 1,
+        "creator": 2,
+        "item_rights": 1,
+    }
+    assert report["typed_claim_candidates"]["status_counts"] == {"proposed": 4}
+    assert report["rights_clearance_required"] == 1
+    assert report["duplicate_drive_file_ids"] == []
+
+
+def test_folder_fetch_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return b"<html>ok</html>"
+
+    def flaky_urlopen(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise OSError("temporary")
+        return Response()
+
+    monkeypatch.setattr(nist_module, "urlopen", flaky_urlopen)
+    monkeypatch.setattr(nist_module.time, "sleep", lambda seconds: None)
+    adapter = NistOrganizedMediaAdapter(folder_id="root", request_delay_s=0, max_attempts=3)
+    assert adapter.fetch_folder_html("root") == "<html>ok</html>"
+    assert len(attempts) == 3

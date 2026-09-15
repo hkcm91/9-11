@@ -1,0 +1,70 @@
+name: nist-full-inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_delay:
+        description: Delay between public folder requests in seconds
+        required: false
+        default: "0.2"
+
+concurrency:
+  group: nist-full-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+
+      - name: Enumerate complete public NIST hierarchy
+        run: |
+          mkdir -p artifacts/raw artifacts/reports
+          archive-ingest inventory-nist-organized \
+            --delay "${{ inputs.request_delay || '0.2' }}" \
+            --max-attempts 4 \
+            --output artifacts/raw/nist-organized-media.jsonl \
+            --report artifacts/reports/nist-inventory-coverage.json
+
+      - name: Build evidence and review outputs
+        run: |
+          archive-ingest profile-jsonl artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/profile.json
+          archive-ingest derive-temporal-claims artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/temporal-claims.jsonl
+          archive-ingest derive-spatial-claims artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/spatial-claims.jsonl
+          archive-ingest derive-entity-claims artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/entity-claims.jsonl
+          archive-ingest build-work-queue artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/work-queue.jsonl
+          archive-ingest build-rights-queue artifacts/raw/nist-organized-media.jsonl --output artifacts/reports/rights-queue.jsonl
+          archive-ingest build-store \
+            --database artifacts/nist-archive.sqlite \
+            --records artifacts/raw/nist-organized-media.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
+
+      - name: Write reproducibility manifest
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          files = []
+          for path in sorted(Path("artifacts").rglob("*")):
+              if path.is_file():
+                  data = path.read_bytes()
+                  files.append({"path": str(path), "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+          Path("artifacts/manifest.json").write_text(json.dumps({"files": files}, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nist-full-inventory
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30

@@ -13,6 +13,7 @@ from archive.adapters import (
     September11DigitalArchiveAdapter,
 )
 from archive.corpus import load_jsonl, reconcile_source_snapshots
+from archive.adapters.nist_organized import nist_inventory_report
 from archive.dedupe import find_candidates
 from archive.derived import (
     derive_entity_claims,
@@ -64,6 +65,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("both", "photo", "video"),
         default="both",
         help="Balance the limit across both media families, or select one family",
+    )
+
+    inventory_nist_organized = subparsers.add_parser(
+        "inventory-nist-organized",
+        help="Inventory the complete public NIST photo/video hierarchy and report claim coverage",
+    )
+    inventory_nist_organized.add_argument("--output", type=Path, required=True)
+    inventory_nist_organized.add_argument("--report", type=Path, required=True)
+    inventory_nist_organized.add_argument("--folder-id", default=None)
+    inventory_nist_organized.add_argument("--delay", type=float, default=0.2)
+    inventory_nist_organized.add_argument("--max-attempts", type=int, default=3)
+    inventory_nist_organized.add_argument(
+        "--media-type", choices=("both", "photo", "video"), default="both"
     )
 
     import_nist_organized = subparsers.add_parser(
@@ -177,6 +191,23 @@ def main(argv: list[str] | None = None) -> int:
         records = adapter.sample(limit=args.limit, media_type=media_type)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} NIST organized-media records to {args.output}")
+        return 0
+
+    if args.command == "inventory-nist-organized":
+        kwargs = {"request_delay_s": args.delay, "max_attempts": args.max_attempts}
+        if args.folder_id:
+            kwargs["folder_id"] = args.folder_id
+        adapter = NistOrganizedMediaAdapter(**kwargs)
+        media_type = None if args.media_type == "both" else args.media_type
+        records = adapter.inventory(media_type=media_type)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        report = nist_inventory_report(records)
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"wrote {len(records)} NIST organized-media records and coverage report")
         return 0
 
     if args.command == "import-nist-organized":

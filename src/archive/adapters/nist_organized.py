@@ -4,7 +4,7 @@ import csv
 import json
 import mimetypes
 import time
-from collections import deque
+from collections import Counter, deque
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -462,11 +462,15 @@ class NistOrganizedMediaAdapter:
         user_agent: str = DEFAULT_USER_AGENT,
         request_delay_s: float = 0.25,
         timeout_s: float = 30.0,
+        max_attempts: int = 3,
     ) -> None:
         self.folder_id = folder_id
         self.user_agent = user_agent
         self.request_delay_s = request_delay_s
         self.timeout_s = timeout_s
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        self.max_attempts = max_attempts
         self._last_request_at: float | None = None
 
     def _throttle(self) -> None:
@@ -481,16 +485,21 @@ class NistOrganizedMediaAdapter:
         return f"https://drive.google.com/embeddedfolderview?id={folder_id}#list"
 
     def fetch_folder_html(self, folder_id: str) -> str:
-        self._throttle()
         url = self.embedded_folder_url(folder_id)
-        request = Request(url, headers={"User-Agent": self.user_agent, "Accept": "text/html"})
-        try:
-            with urlopen(request, timeout=self.timeout_s) as response:  # noqa: S310 - public NIST Drive folder
-                return response.read().decode("utf-8", errors="replace")
-        except Exception as exc:
-            raise NistOrganizedMediaFetchError(f"failed to list public NIST Drive folder {folder_id}: {exc}") from exc
-        finally:
-            self._last_request_at = time.monotonic()
+        for attempt in range(1, self.max_attempts + 1):
+            self._throttle()
+            request = Request(url, headers={"User-Agent": self.user_agent, "Accept": "text/html"})
+            try:
+                with urlopen(request, timeout=self.timeout_s) as response:  # noqa: S310 - public NIST Drive folder
+                    return response.read().decode("utf-8", errors="replace")
+            except Exception as exc:
+                if attempt == self.max_attempts:
+                    raise NistOrganizedMediaFetchError(
+                        f"failed to list public NIST Drive folder {folder_id} after {attempt} attempts: {exc}"
+                    ) from exc
+                time.sleep(min(2 ** (attempt - 1), 4))
+            finally:
+                self._last_request_at = time.monotonic()
 
     @staticmethod
     def _folder_id(entry: Mapping[str, Any]) -> str | None:
@@ -573,6 +582,11 @@ class NistOrganizedMediaAdapter:
             rows = self.inventory_rows(limit=limit, media_type=media_type)
         return [normalize_nist_organized_row(row) for row in rows]
 
+    def inventory(self, *, media_type: str | None = None) -> list[SourceItem]:
+        """Enumerate the complete public hierarchy for one or both media families."""
+        rows = self.inventory_rows(limit=None, media_type=media_type)
+        return [normalize_nist_organized_row(row) for row in rows]
+
     def import_manifest(self, path: Path | str, *, limit: int | None = None) -> list[SourceItem]:
         rows = load_nist_organized_rows(path)
         if limit is not None:
@@ -584,6 +598,84 @@ class NistOrganizedMediaAdapter:
         value = asdict(item)
         value["ingested_at"] = item.ingested_at.isoformat()
         return value
+
+
+def nist_inventory_report(items: list[SourceItem]) -> dict[str, Any]:
+    """Describe public-field and claim coverage without promoting any claim."""
+    media_counts = Counter(item.media_type_raw or "unknown" for item in items)
+    source_groups = Counter()
+    repository_folder_ids: set[str] = set()
+    folder_paths: set[tuple[str, ...]] = set()
+    drive_ids: set[str] = set()
+    duplicate_drive_ids: set[str] = set()
+    temporal = spatial = entity = rights = 0
+    proposed_statuses = Counter()
+
+    for item in items:
+        group = _text(item.metadata_raw.get("source_group"))
+        if group:
+            source_groups[group] += 1
+        repository_folder_id = _text(item.metadata_raw.get("repository_folder_id"))
+        if repository_folder_id:
+            repository_folder_ids.add(repository_folder_id)
+        path = item.metadata_raw.get("folder_path")
+        if isinstance(path, list):
+            folder_paths.add(tuple(str(part) for part in path))
+        drive_id = _text(item.metadata_raw.get("Drive File ID"))
+        if drive_id:
+            if drive_id in drive_ids:
+                duplicate_drive_ids.add(drive_id)
+            drive_ids.add(drive_id)
+
+        temporal_claim = temporal_claim_from_nist_row(item)
+        spatial_claim = spatial_claim_from_nist_row(item)
+        entity_claim = entity_claim_from_nist_row(item)
+        if temporal_claim is not None:
+            temporal += 1
+            proposed_statuses[temporal_claim.status.value] += 1
+        if spatial_claim is not None:
+            spatial += 1
+            proposed_statuses[spatial_claim.status.value] += 1
+        if entity_claim is not None:
+            entity += 1
+            proposed_statuses[entity_claim.status.value] += 1
+        if item.rights_raw:
+            rights += 1
+
+    total = len(items)
+    return {
+        "source_id": SOURCE_ID,
+        "repository_folder_ids": sorted(repository_folder_ids),
+        "records": total,
+        "media_type_counts": dict(media_counts.most_common()),
+        "source_group_counts": dict(source_groups.most_common()),
+        "distinct_asset_folder_paths": len(folder_paths),
+        "distinct_drive_file_ids": len(drive_ids),
+        "duplicate_drive_file_ids": sorted(duplicate_drive_ids),
+        "field_coverage": {
+            "timing": temporal,
+            "explicit_coordinates": spatial,
+            "creator": entity,
+            "item_rights": rights,
+        },
+        "missing_field_counts": {
+            "timing": total - temporal,
+            "explicit_coordinates": total - spatial,
+            "creator": total - entity,
+            "item_rights": total - rights,
+        },
+        "typed_claim_candidates": {
+            "temporal": temporal,
+            "spatial": spatial,
+            "entity": entity,
+            "status_counts": dict(proposed_statuses.most_common()),
+        },
+        "rights_clearance_required": total - rights,
+        "provenance_policy": (
+            "Counts reflect only fields explicitly exposed by the public listing or supplied manifest; "
+            "claims remain proposed until reviewed."
+        ),
+    }
 
 
 def serialize_temporal_claim(claim: TemporalClaim) -> dict[str, Any]:
