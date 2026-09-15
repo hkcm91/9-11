@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from archive.adapters import ArcGisPhotoMapAdapter, InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
-from archive.corpus import load_jsonl
+from archive.corpus import load_jsonl, reconcile_source_snapshots
 from archive.dedupe import find_candidates
 from archive.derived import (
     derive_spatial_claims,
@@ -90,7 +90,7 @@ def _load_many(paths: list[Path]):
     records = []
     for path in paths:
         records.extend(load_jsonl(path))
-    return records
+    return reconcile_source_snapshots(records)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
-            print(f"wrote profile for {len(records)} records to {args.output}")
+            print(f"wrote profile for {len(records)} reconciled records to {args.output}")
         else:
             print(rendered)
         return 0
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         records = _load_many(args.inputs)
         candidates = find_candidates(records, threshold=args.threshold)
         _write_jsonl(args.output, candidates, asdict)
-        print(f"wrote {len(candidates)} duplicate candidates to {args.output}")
+        print(f"wrote {len(candidates)} duplicate candidates from {len(records)} reconciled records to {args.output}")
         return 0
 
     if args.command == "prioritize-jsonl":
