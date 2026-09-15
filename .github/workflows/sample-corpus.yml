@@ -47,6 +47,9 @@ jobs:
       - name: Propose duplicate candidates
         run: |
           archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
+      - name: Derive deterministic temporal claims
+        run: |
+          archive-ingest derive-temporal-claims artifacts/raw/*.jsonl --output artifacts/reports/temporal-claims.jsonl
       - name: Rank enrichment work
         run: |
           archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
@@ -64,6 +67,7 @@ jobs:
           duplicate_count = sum(1 for line in duplicate_path.read_text(encoding="utf-8").splitlines() if line.strip())
           priorities = [json.loads(line) for line in Path("artifacts/reports/enrichment-priority.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           tasks = [json.loads(line) for line in Path("artifacts/reports/work-queue.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          claims = [json.loads(line) for line in Path("artifacts/reports/temporal-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           raw_counts = {}
           for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
               raw_counts[path.name] = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
@@ -73,7 +77,10 @@ jobs:
               "source_counts": profile.get("source_counts"),
               "populated_percent": profile.get("populated_percent"),
               "duplicate_candidates": duplicate_count,
+              "deterministic_temporal_claims": len(claims),
+              "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in claims)),
               "work_queue_task_counts": dict(Counter(task["task_type"] for task in tasks)),
+              "work_queue_role_counts": dict(Counter(task["record_role"] for task in tasks)),
               "highest_enrichment_priority": priorities[:10],
               "highest_priority_tasks": tasks[:10],
           }
