@@ -1,11 +1,61 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from archive.adapters.nist_organized import temporal_claim_from_nist_row
 from archive.heuristics import document_coverage_claim_from_title
-from archive.models import EvidenceRef, LocationKind, SourceItem, SpatialClaim, TemporalClaim
+from archive.models import EvidenceRef, LocationKind, SourceItem, SpatialClaim, TemporalClaim, TimeKind
+
+
+def _parse_ia_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _internet_archive_recording_claim(item: SourceItem) -> TemporalClaim | None:
+    if item.source_id != "internet-archive-understanding-911":
+        return None
+    start = _parse_ia_utc_datetime(item.metadata_raw.get("start_time"))
+    end = _parse_ia_utc_datetime(item.metadata_raw.get("stop_time"))
+    if start is None and end is None:
+        return None
+    if start is not None and end is not None and end < start:
+        return None
+    return TemporalClaim(
+        subject_id=item.id,
+        time_kind=TimeKind.RECORDING,
+        start_time=start,
+        end_time=end,
+        confidence=0.97,
+        method="internet_archive_broadcast_start_stop_metadata",
+        created_by_agent="deterministic-internet-archive-importer",
+        evidence=[
+            EvidenceRef(
+                source_item_id=item.id,
+                relationship="broadcast_timing_metadata",
+                note=(
+                    "UTC recording interval preserved from Internet Archive start_time/stop_time metadata. "
+                    "Local-time and UTC-offset source fields remain available in raw metadata."
+                ),
+                weight=0.97,
+            )
+        ],
+    )
 
 
 def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]:
@@ -26,6 +76,10 @@ def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]
             nist_claim = temporal_claim_from_nist_row(item)
             if nist_claim is not None:
                 claims.append(nist_claim)
+
+        ia_claim = _internet_archive_recording_claim(item)
+        if ia_claim is not None:
+            claims.append(ia_claim)
     return claims
 
 
