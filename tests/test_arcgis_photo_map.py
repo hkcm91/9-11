@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from archive.adapters.arcgis_photo_map import ArcGisPhotoMapAdapter
+import pytest
+
+from archive.adapters.arcgis_photo_map import ArcGisPhotoMapAdapter, ArcGisPhotoMapError
 
 
 def test_candidate_ids_are_found_recursively() -> None:
@@ -18,7 +20,6 @@ def test_candidate_ids_are_found_recursively() -> None:
 
 
 def test_web_mercator_conversion_is_close_to_lower_manhattan() -> None:
-    # Approximate Web Mercator coordinates for lower Manhattan.
     lat, lon = ArcGisPhotoMapAdapter._geometry_wgs84(
         {"x": -8238307.34, "y": 4970071.58},
         {"wkid": 102100},
@@ -54,6 +55,45 @@ def test_normalize_feature_preserves_geometry_and_creator() -> None:
     assert item.location_raw == "40.7100000,-74.0100000"
     assert item.media_type_raw == "photo"
     assert item.source_item_id.endswith(":42")
+
+
+def test_current_archdisk_fields_promote_name_address_and_time() -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    feature = {
+        "attributes": {
+            "OBJECTID": 7,
+            "Name": "John Labriola",
+            "Address": "Washington St.",
+            "timeTaken": "07:40:00",
+            "sourceURL": "https://example.test/source",
+            "notesExtended": "Mapped from a published photo sequence.",
+        },
+        "geometry": {"x": -8239153.2582, "y": 4969697.5296},
+    }
+    layer = {
+        "web_map_id": "0123456789abcdef0123456789abcdef",
+        "url": "https://services.arcgis.com/example/FeatureServer/0",
+    }
+
+    item = adapter.normalize_feature(feature, layer=layer, spatial_reference={"wkid": 102100})
+
+    assert item.creator_raw == "John Labriola"
+    assert item.location_raw == "Washington St."
+    assert item.date_raw == "07:40:00"
+    assert item.description_raw == "Mapped from a published photo sequence."
+    assert item.metadata_raw["external_source_url"] == "https://example.test/source"
+
+
+def test_polygon_context_feature_is_not_normalized_as_photo() -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    feature = {
+        "attributes": {"OBJECTID": 8, "Name": "WTC5"},
+        "geometry": {"rings": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+    }
+    layer = {"web_map_id": "0123456789abcdef0123456789abcdef", "url": "https://example.test/FeatureServer/0"}
+
+    with pytest.raises(ArcGisPhotoMapError):
+        adapter.normalize_feature(feature, layer=layer)
 
 
 def test_feature_id_fallback_is_deterministic() -> None:
