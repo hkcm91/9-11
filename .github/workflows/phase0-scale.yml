@@ -1,8 +1,6 @@
 name: phase0-scale
 
 on:
-  push:
-    branches: [archive-skeleton]
   workflow_dispatch:
     inputs:
       internet_archive_limit:
