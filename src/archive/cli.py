@@ -9,6 +9,7 @@ from archive.adapters import InternetArchiveAdapter, NistWtcRepositoryAdapter, S
 from archive.corpus import load_jsonl
 from archive.dedupe import find_candidates
 from archive.profiling import profile_records
+from archive.quality import prioritize_records
 from archive.registry import enabled_sources
 
 
@@ -47,6 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
     dedupe.add_argument("inputs", nargs="+", type=Path)
     dedupe.add_argument("--threshold", type=float, default=0.86)
     dedupe.add_argument("--output", type=Path, required=True)
+
+    prioritize = subparsers.add_parser("prioritize-jsonl", help="Rank records for metadata enrichment work")
+    prioritize.add_argument("inputs", nargs="+", type=Path)
+    prioritize.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -113,6 +118,13 @@ def main(argv: list[str] | None = None) -> int:
         candidates = find_candidates(records, threshold=args.threshold)
         _write_jsonl(args.output, candidates, asdict)
         print(f"wrote {len(candidates)} duplicate candidates to {args.output}")
+        return 0
+
+    if args.command == "prioritize-jsonl":
+        records = _load_many(args.inputs)
+        priorities = prioritize_records(records)
+        _write_jsonl(args.output, priorities, asdict)
+        print(f"wrote {len(priorities)} enrichment priorities to {args.output}")
         return 0
 
     return 2
