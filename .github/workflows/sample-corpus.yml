@@ -26,6 +26,9 @@ jobs:
         run: |
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.2 --output artifacts/raw/nist-repository.jsonl
+      - name: Inventory archDisk public feature layers
+        run: |
+          archive-photo-map-info --delay 0.15 --output artifacts/reports/photo-map-inventory.json
       - name: Probe archDisk geolocated photo metadata
         run: |
           rm -f artifacts/raw/archdisk-photo-map.jsonl
@@ -95,6 +98,7 @@ jobs:
 
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
           store_stats = json.loads(Path("artifacts/reports/store-stats.json").read_text(encoding="utf-8"))
+          photo_inventory = json.loads(Path("artifacts/reports/photo-map-inventory.json").read_text(encoding="utf-8"))
           duplicate_count = len(jsonl("artifacts/reports/duplicate-candidates.jsonl"))
           priorities = jsonl("artifacts/reports/enrichment-priority.jsonl")
           tasks = jsonl("artifacts/reports/work-queue.jsonl")
@@ -116,6 +120,7 @@ jobs:
               "populated_percent": profile.get("populated_percent"),
               "cross_source_duplicate_candidates": duplicate_count,
               "photo_map_probe": photo_probe,
+              "photo_map_inventory": photo_inventory,
               "deterministic_temporal_claims": len(temporal_claims),
               "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in temporal_claims)),
               "provenance_backed_spatial_claims": len(spatial_claims),
