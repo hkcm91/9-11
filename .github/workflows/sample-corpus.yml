@@ -74,6 +74,15 @@ jobs:
       - name: Build separate rights-clearance queue
         run: |
           archive-ingest build-rights-queue artifacts/raw/*.jsonl --output artifacts/reports/rights-queue.jsonl
+      - name: Materialize SQLite evidence store
+        run: |
+          archive-ingest build-store \
+            --database artifacts/archive.sqlite \
+            --records artifacts/raw/*.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
       - name: Publish corpus quality summary
         run: |
           python - <<'PY'
@@ -85,6 +94,7 @@ jobs:
               return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
 
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
+          store_stats = json.loads(Path("artifacts/reports/store-stats.json").read_text(encoding="utf-8"))
           duplicate_count = len(jsonl("artifacts/reports/duplicate-candidates.jsonl"))
           priorities = jsonl("artifacts/reports/enrichment-priority.jsonl")
           tasks = jsonl("artifacts/reports/work-queue.jsonl")
@@ -111,11 +121,12 @@ jobs:
               "provenance_backed_spatial_claims": len(spatial_claims),
               "spatial_claim_kinds": dict(Counter(claim["location_kind"] for claim in spatial_claims)),
               "entity_reference_claims": len(entity_claims),
-              "entity_relation_counts": dict(Counter(claim["relation"] for claim in entity_claims)),
+              "entity_relation_counts": dict(Counter(claim["role"] for claim in entity_claims)),
               "research_task_count": len(tasks),
               "research_task_counts": dict(Counter(task["task_type"] for task in tasks)),
               "research_role_counts": dict(Counter(task["record_role"] for task in tasks)),
               "rights_clearance_task_count": len(rights_tasks),
+              "sqlite_store": store_stats,
               "highest_enrichment_priority": priorities[:10],
               "highest_priority_research_tasks": tasks[:10],
           }
