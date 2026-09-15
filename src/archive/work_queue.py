@@ -169,13 +169,29 @@ def _role_multiplier(task_type: str, role: str) -> float:
     return 1.0
 
 
-def tasks_for_item(item: SourceItem, priority: EnrichmentPriority | None = None) -> list[EnrichmentTask]:
+def tasks_for_item(
+    item: SourceItem,
+    priority: EnrichmentPriority | None = None,
+    *,
+    include_rights: bool = False,
+) -> list[EnrichmentTask]:
+    """Build research-enrichment tasks for one source item.
+
+    Rights clearance is deliberately excluded from the default research queue.
+    It is a publication/use gate rather than evidence needed to reconstruct the
+    historical timeline. Callers can opt it back in for a rights-clearance pass.
+    """
+
     priority = priority or prioritize_item(item)
     role = _record_role(item)
     tasks: list[EnrichmentTask] = []
     for missing_field in priority.missing_fields:
         task_type = TASK_FOR_FIELD.get(missing_field)
-        if task_type is None or not _task_is_applicable(item, task_type, role):
+        if task_type is None:
+            continue
+        if task_type == "resolve_rights" and not include_rights:
+            continue
+        if not _task_is_applicable(item, task_type, role):
             continue
         task_priority = min(
             1.0,
@@ -202,8 +218,23 @@ def tasks_for_item(item: SourceItem, priority: EnrichmentPriority | None = None)
     return tasks
 
 
-def build_work_queue(records: Iterable[SourceItem]) -> list[EnrichmentTask]:
+def build_work_queue(
+    records: Iterable[SourceItem],
+    *,
+    include_rights: bool = False,
+) -> list[EnrichmentTask]:
     tasks: list[EnrichmentTask] = []
     for item in records:
-        tasks.extend(tasks_for_item(item))
+        tasks.extend(tasks_for_item(item, include_rights=include_rights))
     return sorted(tasks, key=lambda task: (-task.priority, task.task_type, task.item_id))
+
+
+def build_rights_queue(records: Iterable[SourceItem]) -> list[EnrichmentTask]:
+    """Build only publication/rights-clearance tasks."""
+
+    tasks: list[EnrichmentTask] = []
+    for item in records:
+        for task in tasks_for_item(item, include_rights=True):
+            if task.task_type == "resolve_rights":
+                tasks.append(task)
+    return sorted(tasks, key=lambda task: (-task.priority, task.item_id))
