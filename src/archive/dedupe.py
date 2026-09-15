@@ -66,8 +66,10 @@ def compare(left: SourceItem, right: SourceItem) -> DuplicateCandidate:
     if same_date:
         reasons.append("same raw date")
 
-    # Date agreement is useful corroboration, but never enough by itself.
-    score = 0.50 * title + 0.20 * creator + 0.20 * description + (0.10 if same_date else 0.0)
+    # Keep the similarity score on a familiar 0..1 scale while using the
+    # qualification rules below—not score alone—to decide whether a candidate
+    # is review-worthy. Date is a small corroborating bonus, capped at 1.0.
+    score = min(1.0, 0.50 * title + 0.20 * creator + 0.30 * description + (0.05 if same_date else 0.0))
     return DuplicateCandidate(left.id, right.id, round(score, 4), reasons)
 
 
