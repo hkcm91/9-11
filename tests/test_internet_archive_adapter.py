@@ -35,12 +35,7 @@ def test_normalize_preserves_metadata() -> None:
 
 def test_configured_collection_is_lineage_even_with_auxiliary_memberships() -> None:
     adapter = InternetArchiveAdapter(collection="TV-NHK", request_delay_s=0)
-    item = adapter.normalize(
-        {
-            "identifier": "x",
-            "collection": ["TV-NHK", "911", "tvarchive", "fav-someone"],
-        }
-    )
+    item = adapter.normalize({"identifier": "x", "collection": ["TV-NHK", "911", "tvarchive", "fav-someone"]})
     assert item.collection_raw == "TV-NHK"
 
 
@@ -73,3 +68,35 @@ def test_iter_items_stops_at_limit(monkeypatch) -> None:
 
     assert len(results) == 7
     assert calls == [1, 2]
+
+
+def test_file_summary_tracks_formats_originals_and_lengths() -> None:
+    payload = {
+        "files": [
+            {"name": "a.mp4", "format": "MPEG4", "source": "original", "length": "00:30:00"},
+            {"name": "a.ogv", "format": "Ogg Video", "source": "derivative", "length": "1800"},
+        ]
+    }
+    summary = InternetArchiveAdapter._file_summary(payload)
+
+    assert summary["file_count"] == 2
+    assert summary["original_file_count"] == 1
+    assert summary["formats"] == ["MPEG4", "Ogg Video"]
+    assert summary["duration_candidates"] == ["00:30:00", "1800"]
+
+
+def test_enrich_search_item_merges_full_metadata(monkeypatch) -> None:
+    adapter = InternetArchiveAdapter(request_delay_s=0)
+
+    def fake_fetch(identifier: str):
+        assert identifier == "sample-item"
+        return {
+            "metadata": {"identifier": identifier, "title": "Detailed title", "date": "2001-09-11"},
+            "files": [{"format": "MPEG4", "source": "original", "length": "60"}],
+        }
+
+    monkeypatch.setattr(adapter, "fetch_item_metadata", fake_fetch)
+    enriched = adapter.enrich_search_item({"identifier": "sample-item", "title": "Search title"})
+
+    assert enriched["title"] == "Detailed title"
+    assert enriched["_file_summary"]["original_file_count"] == 1
