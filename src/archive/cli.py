@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from archive.adapters import InternetArchiveAdapter, September11DigitalArchiveAdapter
+from archive.adapters import InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
 from archive.corpus import load_jsonl
 from archive.dedupe import find_candidates
 from archive.profiling import profile_records
@@ -22,24 +22,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="archive-ingest")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    sample_911da = subparsers.add_parser(
-        "sample-911da",
-        help="Sample metadata from the September 11 Digital Archive",
-    )
+    sample_911da = subparsers.add_parser("sample-911da", help="Sample metadata from the September 11 Digital Archive")
     _add_output_args(sample_911da, default_delay=1.0)
     sample_911da.add_argument("--collection", type=int, default=None)
-    sample_911da.add_argument(
-        "--details",
-        action="store_true",
-        help="Enrich each enumerated record with its Dublin Core XML metadata",
-    )
+    sample_911da.add_argument("--details", action="store_true", help="Enrich each record with Dublin Core XML metadata")
 
-    sample_ia = subparsers.add_parser(
-        "sample-internet-archive",
-        help="Sample metadata from the Internet Archive Understanding 9/11 collection",
-    )
+    sample_ia = subparsers.add_parser("sample-internet-archive", help="Sample Internet Archive Understanding 9/11 metadata")
     _add_output_args(sample_ia, default_delay=0.5)
     sample_ia.add_argument("--collection", default="911")
+    sample_ia.add_argument("--details", action="store_true", help="Fetch full item metadata and summarize files")
+
+    sample_nist = subparsers.add_parser("sample-nist", help="Inventory public NIST WTC repository entry points")
+    sample_nist.add_argument("--output", type=Path, required=True)
+    sample_nist.add_argument("--delay", type=float, default=0.5)
 
     sources = subparsers.add_parser("list-sources", help="List enabled Phase 0 sources")
     sources.add_argument("--registry", type=Path, default=Path("config/sources.phase0.yaml"))
@@ -75,20 +70,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sample-911da":
         adapter = September11DigitalArchiveAdapter(request_delay_s=args.delay)
-        records = adapter.sample(
-            limit=args.limit,
-            collection_id=args.collection,
-            enrich=args.details,
-        )
+        records = adapter.sample(limit=args.limit, collection_id=args.collection, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")
         return 0
 
     if args.command == "sample-internet-archive":
         adapter = InternetArchiveAdapter(collection=args.collection, request_delay_s=args.delay)
-        records = adapter.sample(limit=args.limit)
+        records = adapter.sample(limit=args.limit, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")
+        return 0
+
+    if args.command == "sample-nist":
+        adapter = NistWtcRepositoryAdapter(request_delay_s=args.delay)
+        records = adapter.sample()
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} NIST repository records to {args.output}")
         return 0
 
     if args.command == "list-sources":
