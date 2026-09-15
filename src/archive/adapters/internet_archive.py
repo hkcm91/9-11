@@ -111,13 +111,26 @@ class InternetArchiveAdapter:
     def _file_summary(payload: dict[str, Any]) -> dict[str, Any]:
         files = payload.get("files")
         if not isinstance(files, list):
-            return {"file_count": 0, "formats": [], "duration_candidates": []}
+            return {
+                "file_count": 0,
+                "formats": [],
+                "duration_candidates": [],
+                "transcript_files": [],
+                "primary_media_files": [],
+            }
+
         formats: set[str] = set()
         durations: list[str] = []
         original_count = 0
+        transcript_files: list[str] = []
+        primary_media_files: list[str] = []
+        transcript_exts = (".srt", ".vtt", ".sbv", ".ttml", ".dfxp", ".txt")
+        media_exts = (".mp4", ".m4v", ".mov", ".mpg", ".mpeg", ".avi", ".ogv", ".webm", ".mp3", ".wav", ".m4a", ".flac")
+
         for file in files:
             if not isinstance(file, dict):
                 continue
+            name = str(file.get("name") or "").strip()
             fmt = file.get("format")
             if isinstance(fmt, str) and fmt.strip():
                 formats.add(fmt.strip())
@@ -126,11 +139,22 @@ class InternetArchiveAdapter:
             length = file.get("length")
             if isinstance(length, (str, int, float)) and str(length).strip():
                 durations.append(str(length).strip())
+            lower_name = name.lower()
+            lower_format = str(fmt or "").lower()
+            if name and (lower_name.endswith(transcript_exts) or any(token in lower_format for token in ("subtitle", "subrip", "webvtt", "closed caption", "text"))):
+                transcript_files.append(name)
+            if name and (lower_name.endswith(media_exts) or any(token in lower_format for token in ("mpeg", "video", "audio", "quicktime"))):
+                primary_media_files.append(name)
+
         return {
             "file_count": len(files),
             "original_file_count": original_count,
             "formats": sorted(formats),
             "duration_candidates": durations[:25],
+            "transcript_files": transcript_files[:50],
+            "transcript_file_count": len(transcript_files),
+            "primary_media_files": primary_media_files[:50],
+            "primary_media_file_count": len(primary_media_files),
         }
 
     def enrich_search_item(self, item: dict[str, Any]) -> dict[str, Any]:
