@@ -55,9 +55,30 @@ def _task_id(item_id: str, task_type: str) -> str:
 
 
 def _record_role(item: SourceItem) -> str:
+    """Infer workflow role from source structure before generic media labels."""
+
     media = (item.media_type_raw or "").lower()
     title = (item.title_raw or "").lower()
     collection = (item.collection_raw or "").lower()
+    collection_id = item.metadata_raw.get("collection_id")
+    try:
+        collection_id = int(collection_id) if collection_id is not None else None
+    except (TypeError, ValueError):
+        collection_id = None
+
+    # Source-specific roles are much more meaningful than generic `movies` or
+    # missing item-type labels.
+    if item.source_id == "internet-archive-understanding-911":
+        return "broadcast"
+    if item.source_id == "archdisk-911-photo-map":
+        return "photo"
+    if item.source_id == "september-11-digital-archive":
+        if collection_id == 11:
+            return "document"
+        if collection_id == 267:
+            return "testimony"
+        if collection_id == 266:
+            return "audio"
 
     if item.source_id == "nist-wtc-disaster-repository" or media == "repository_entry":
         return "repository"
@@ -78,7 +99,7 @@ def _expected_claim_kind(task_type: str, role: str) -> str | None:
     if task_type == "resolve_time":
         if role in {"photo", "video"}:
             return "capture_time"
-        if role == "audio":
+        if role in {"audio", "broadcast"}:
             return "recording_time"
         if role == "testimony":
             return "interview_time_or_described_event_time"
@@ -102,6 +123,7 @@ def _instructions(task_type: str, role: str) -> str:
             "photo": "capture time of the photograph",
             "video": "capture interval of the video",
             "audio": "recording interval of the audio",
+            "broadcast": "broadcast recording interval",
             "testimony": "interview date and any separately evidenced event times described in the testimony",
             "document": "coverage/effective period of the document",
         }.get(role, "historically relevant time represented by this record")
@@ -116,8 +138,13 @@ def _instructions(task_type: str, role: str) -> str:
                 "Propose the camera capture location and, when possible, heading. Cite visible landmarks, "
                 "source testimony, maps, or neighboring sequence evidence; include an accuracy radius and confidence."
             )
+        if role == "testimony":
+            return (
+                "Identify locations tied to the witness's described September 11 experiences and label each semantic role. "
+                "Keep the later interview location separate from event locations and do not infer places from vague narrative text."
+            )
         return (
-            "Identify only locations explicitly associated with the recording/testimony and label their semantic role. "
+            "Identify only locations explicitly associated with the recording and label their semantic role. "
             "Do not turn a place merely mentioned in narrative text into a capture location."
         )
     if task_type == "resolve_creator":
@@ -149,6 +176,17 @@ def _task_is_applicable(item: SourceItem, task_type: str, role: str) -> bool:
     }:
         return False
 
+    # If a source/collection already tells us what kind of historical record it
+    # is, a generic media-classification task adds no value.
+    if task_type == "classify_media" and role != "unknown":
+        return False
+
+    # Internet Archive TV items are timeline/broadcast anchors. The item-level
+    # archive record is not a Lower Manhattan camera position; scene-level
+    # footage geolocation belongs to a future segmentation stage.
+    if role == "broadcast" and task_type == "resolve_location":
+        return False
+
     # Strict title parsing already resolves the document's coverage period.
     if role == "document" and task_type == "resolve_time" and document_coverage_claim_from_title(item) is not None:
         return False
@@ -165,7 +203,16 @@ def _role_multiplier(task_type: str, role: str) -> float:
     if task_type == "resolve_location":
         return {"photo": 1.0, "video": 1.0, "audio": 0.75, "testimony": 0.70}.get(role, 0.55)
     if task_type == "resolve_time":
-        return {"photo": 1.0, "video": 1.0, "audio": 0.9, "testimony": 0.65, "document": 0.55}.get(role, 0.7)
+        return {
+            "photo": 1.0,
+            "video": 1.0,
+            "audio": 0.9,
+            "broadcast": 0.95,
+            "testimony": 0.65,
+            "document": 0.55,
+        }.get(role, 0.7)
+    if task_type == "resolve_creator":
+        return {"testimony": 0.55, "audio": 0.70, "document": 0.75}.get(role, 1.0)
     return 1.0
 
 
