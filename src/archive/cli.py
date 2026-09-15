@@ -60,6 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
     dedupe = subparsers.add_parser("dedupe-jsonl", help="Propose likely duplicate records without merging them")
     dedupe.add_argument("inputs", nargs="+", type=Path)
     dedupe.add_argument("--threshold", type=float, default=0.86)
+    dedupe.add_argument(
+        "--include-same-source",
+        action="store_true",
+        help="Also run the stricter duplicate pass within one custodial source",
+    )
     dedupe.add_argument("--output", type=Path, required=True)
 
     prioritize = subparsers.add_parser("prioritize-jsonl", help="Rank records for metadata enrichment work")
@@ -151,9 +156,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "dedupe-jsonl":
         records = _load_many(args.inputs)
-        candidates = find_candidates(records, threshold=args.threshold)
+        candidates = find_candidates(
+            records,
+            threshold=args.threshold,
+            include_same_source=args.include_same_source,
+        )
         _write_jsonl(args.output, candidates, asdict)
-        print(f"wrote {len(candidates)} duplicate candidates from {len(records)} reconciled records to {args.output}")
+        mode = "cross-source + strict same-source" if args.include_same_source else "cross-source"
+        print(
+            f"wrote {len(candidates)} {mode} duplicate candidates "
+            f"from {len(records)} reconciled records to {args.output}"
+        )
         return 0
 
     if args.command == "prioritize-jsonl":
