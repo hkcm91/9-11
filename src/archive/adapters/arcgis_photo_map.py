@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -108,8 +109,7 @@ class ArcGisPhotoMapAdapter:
         results: list[dict[str, Any]] = []
         for item_id in sorted(candidates):
             item = self.fetch_item(item_id)
-            item_type = str(item.get("type") or "").lower()
-            if item_type == "web map":
+            if str(item.get("type") or "").lower() == "web map":
                 results.append(item)
         return results
 
@@ -164,12 +164,11 @@ class ArcGisPhotoMapAdapter:
                         }
         return list(found.values())
 
-    def _layer_zero_url(self, service_url: str) -> str:
+    @staticmethod
+    def _layer_zero_url(service_url: str) -> str:
         trimmed = service_url.rstrip("/")
         tail = trimmed.rsplit("/", 1)[-1]
-        if tail.isdigit():
-            return trimmed
-        return f"{trimmed}/0"
+        return trimmed if tail.isdigit() else f"{trimmed}/0"
 
     def query_features(self, layer_url: str, *, limit: int = 50) -> dict[str, Any]:
         if limit < 1 or limit > 2000:
@@ -204,7 +203,7 @@ class ArcGisPhotoMapAdapter:
         if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
             return None, None
         sr = geometry.get("spatialReference") or spatial_reference or {}
-        wkid = sr.get("latestWkid") or sr.get("wkid") if isinstance(sr, dict) else None
+        wkid = (sr.get("latestWkid") or sr.get("wkid")) if isinstance(sr, dict) else None
         if wkid in {3857, 102100, 102113}:
             return cls._mercator_to_wgs84(float(x), float(y))
         if wkid in {4326, 4269} or (-180 <= x <= 180 and -90 <= y <= 90):
@@ -231,8 +230,9 @@ class ArcGisPhotoMapAdapter:
         geometry = feature.get("geometry")
         lat, lon = self._geometry_wgs84(geometry, spatial_reference)
         object_id = self._first_attr(attrs, ("OBJECTID", "FID", "ObjectId", "GlobalID"))
-        stable = object_id or json.dumps([layer.get("url"), attrs, geometry], sort_keys=True, default=str)
-        source_item_id = f"{layer.get('item_id') or layer.get('web_map_id')}:{object_id or abs(hash(stable))}"
+        stable_material = json.dumps([layer.get("url"), attrs, geometry], sort_keys=True, default=str)
+        fallback_id = hashlib.sha256(stable_material.encode("utf-8")).hexdigest()[:20]
+        source_item_id = f"{layer.get('item_id') or layer.get('web_map_id')}:{object_id or fallback_id}"
         title = self._first_attr(attrs, ("Title", "Name", "Photo", "Photographer", "Filename", "FileName"))
         creator = self._first_attr(attrs, ("Photographer", "Creator", "Author", "Source", "Credit"))
         date = self._first_attr(attrs, ("Date", "PhotoDate", "CaptureDate", "Time", "Timestamp"))
@@ -262,6 +262,8 @@ class ArcGisPhotoMapAdapter:
         )
 
     def sample(self, *, limit: int = 50) -> list[SourceItem]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
         layers = self.discover_feature_layers()
         if not layers:
             raise ArcGisPhotoMapError("no public FeatureServer layer could be resolved from the ArcGIS app")
