@@ -104,3 +104,98 @@ def test_feature_id_fallback_is_deterministic() -> None:
     first = adapter.normalize_feature(feature, layer=layer)
     second = adapter.normalize_feature(feature, layer=layer)
     assert first.source_item_id == second.source_item_id
+
+
+def test_feature_count_and_object_ids_use_transfer_limit_safe_queries(monkeypatch) -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    calls: list[dict] = []
+
+    def fake_get(url: str, params=None):
+        calls.append(dict(params or {}))
+        if params and params.get("returnCountOnly") == "true":
+            return {"count": 517}
+        if params and params.get("returnIdsOnly") == "true":
+            return {"objectIdFieldName": "OBJECTID", "objectIds": [3, 1, 2, 2]}
+        raise AssertionError("unexpected query")
+
+    monkeypatch.setattr(adapter, "_get_json_url", fake_get)
+
+    assert adapter.query_feature_count("https://example.test/FeatureServer/0") == 517
+    assert adapter.query_object_ids("https://example.test/FeatureServer/0") == [1, 2, 3]
+    assert calls[0]["returnCountOnly"] == "true"
+    assert calls[1]["returnIdsOnly"] == "true"
+
+
+def test_iter_feature_pages_chunks_complete_object_id_set(monkeypatch) -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    monkeypatch.setattr(adapter, "query_object_ids", lambda url: [1, 2, 3, 4, 5])
+    requested: list[list[int | str]] = []
+
+    def fake_query(layer_url: str, *, limit=50, offset=0, object_ids=None):
+        requested.append(list(object_ids or []))
+        return {
+            "features": [
+                {"attributes": {"OBJECTID": value}, "geometry": {"x": -74.0, "y": 40.7}}
+                for value in (object_ids or [])
+            ]
+        }
+
+    monkeypatch.setattr(adapter, "query_features", fake_query)
+    pages = list(adapter.iter_feature_pages("https://example.test/FeatureServer/0", page_size=2))
+
+    assert requested == [[1, 2], [3, 4], [5]]
+    assert [len(page["features"]) for page in pages] == [2, 2, 1]
+
+
+def test_iter_feature_pages_falls_back_to_offsets_when_ids_unavailable(monkeypatch) -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+
+    def no_ids(url: str):
+        raise ArcGisPhotoMapError("ids unsupported")
+
+    monkeypatch.setattr(adapter, "query_object_ids", no_ids)
+    offsets: list[int] = []
+
+    def fake_query(layer_url: str, *, limit=50, offset=0, object_ids=None):
+        offsets.append(offset)
+        count = 2 if offset == 0 else 1
+        return {
+            "features": [
+                {"attributes": {"OBJECTID": offset + i}, "geometry": {"x": -74.0, "y": 40.7}}
+                for i in range(count)
+            ]
+        }
+
+    monkeypatch.setattr(adapter, "query_features", fake_query)
+    pages = list(adapter.iter_feature_pages("https://example.test/FeatureServer/0", page_size=2))
+
+    assert offsets == [0, 2]
+    assert [len(page["features"]) for page in pages] == [2, 1]
+
+
+def test_sample_reads_across_multiple_feature_pages(monkeypatch) -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    layer = {
+        "web_map_id": "0123456789abcdef0123456789abcdef",
+        "url": "https://example.test/FeatureServer/0",
+    }
+    monkeypatch.setattr(adapter, "discover_feature_layers", lambda: [layer])
+
+    def fake_pages(url: str, *, page_size: int):
+        yield {
+            "features": [
+                {"attributes": {"OBJECTID": 1, "Name": "A"}, "geometry": {"x": -74.0, "y": 40.70}},
+                {"attributes": {"OBJECTID": 2, "Name": "B"}, "geometry": {"x": -74.0, "y": 40.71}},
+            ]
+        }
+        yield {
+            "features": [
+                {"attributes": {"OBJECTID": 3, "Name": "C"}, "geometry": {"x": -74.0, "y": 40.72}},
+            ]
+        }
+
+    monkeypatch.setattr(adapter, "iter_feature_pages", fake_pages)
+    records = adapter.sample(limit=3)
+
+    assert [record.creator_raw for record in records] == ["A", "B", "C"]
+    assert len({record.id for record in records}) == 3
