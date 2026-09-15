@@ -1,0 +1,159 @@
+name: sample-corpus
+
+on:
+  pull_request:
+    paths:
+      - "src/archive/**"
+      - "config/sources.phase0.yaml"
+      - ".github/workflows/sample-corpus.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: phase0-sample-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+      - name: Collect NIST repository inventory
+        run: |
+          mkdir -p artifacts/raw artifacts/reports
+          archive-ingest sample-nist --delay 0.2 --output artifacts/raw/nist-repository.jsonl
+          archive-ingest sample-nist-organized --limit 25 --delay 0.2 --output artifacts/raw/nist-organized-media.jsonl
+      - name: Inventory archDisk public feature layers
+        run: |
+          archive-photo-map-info --delay 0.15 --output artifacts/reports/photo-map-inventory.json
+      - name: Probe archDisk geolocated photo metadata
+        run: |
+          rm -f artifacts/raw/archdisk-photo-map.jsonl
+          if archive-ingest sample-photo-map --limit 25 --delay 0.15 --output artifacts/raw/archdisk-photo-map.jsonl; then
+            printf '{"status":"success"}\n' > artifacts/reports/photo-map-probe.json
+          else
+            rm -f artifacts/raw/archdisk-photo-map.jsonl
+            printf '{"status":"failed"}\n' > artifacts/reports/photo-map-probe.json
+          fi
+      - name: Collect Voices of 9.11 detailed metadata
+        run: |
+          archive-ingest sample-911da --collection 267 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-voices.jsonl
+      - name: Collect FDNY Incident Action Plan detailed metadata
+        run: |
+          archive-ingest sample-911da --collection 11 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-fdny-plans.jsonl
+      - name: Collect Sonic Memorial detailed metadata
+        run: |
+          archive-ingest sample-911da --collection 266 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-sonic-memorial.jsonl
+      - name: Collect Internet Archive search metadata
+        run: |
+          archive-ingest sample-internet-archive --limit 100 --delay 0.2 --output artifacts/raw/internet-archive.jsonl
+      - name: Collect detailed Internet Archive broadcast metadata
+        run: |
+          archive-ingest sample-internet-archive --details --limit 25 --delay 0.2 --output artifacts/raw/internet-archive-details.jsonl
+      - name: Profile combined corpus
+        run: |
+          archive-ingest profile-jsonl artifacts/raw/*.jsonl --output artifacts/reports/profile.json
+      - name: Propose cross-source duplicate candidates
+        run: |
+          archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
+      - name: Derive deterministic temporal claims
+        run: |
+          archive-ingest derive-temporal-claims artifacts/raw/*.jsonl --output artifacts/reports/temporal-claims.jsonl
+      - name: Derive provenance-backed spatial claims
+        run: |
+          archive-ingest derive-spatial-claims artifacts/raw/*.jsonl --output artifacts/reports/spatial-claims.jsonl
+      - name: Derive entity-reference claims
+        run: |
+          archive-ingest derive-entity-claims artifacts/raw/*.jsonl --output artifacts/reports/entity-claims.jsonl
+      - name: Rank enrichment work
+        run: |
+          archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
+      - name: Build historical research queue
+        run: |
+          archive-ingest build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
+      - name: Build separate rights-clearance queue
+        run: |
+          archive-ingest build-rights-queue artifacts/raw/*.jsonl --output artifacts/reports/rights-queue.jsonl
+      - name: Materialize SQLite evidence store
+        run: |
+          archive-ingest build-store \
+            --database artifacts/archive.sqlite \
+            --records artifacts/raw/*.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
+      - name: Publish corpus quality summary
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          def jsonl(path):
+              return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+          profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
+          store_stats = json.loads(Path("artifacts/reports/store-stats.json").read_text(encoding="utf-8"))
+          photo_inventory = json.loads(Path("artifacts/reports/photo-map-inventory.json").read_text(encoding="utf-8"))
+          duplicate_count = len(jsonl("artifacts/reports/duplicate-candidates.jsonl"))
+          priorities = jsonl("artifacts/reports/enrichment-priority.jsonl")
+          tasks = jsonl("artifacts/reports/work-queue.jsonl")
+          rights_tasks = jsonl("artifacts/reports/rights-queue.jsonl")
+          temporal_claims = jsonl("artifacts/reports/temporal-claims.jsonl")
+          spatial_claims = jsonl("artifacts/reports/spatial-claims.jsonl")
+          entity_claims = jsonl("artifacts/reports/entity-claims.jsonl")
+          photo_probe = json.loads(Path("artifacts/reports/photo-map-probe.json").read_text(encoding="utf-8"))
+
+          raw_counts = {}
+          for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
+              raw_counts[path.name] = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+          summary = {
+              "records_by_file": raw_counts,
+              "raw_observations": sum(raw_counts.values()),
+              "unique_reconciled_records": profile.get("total_records"),
+              "source_counts": profile.get("source_counts"),
+              "populated_percent": profile.get("populated_percent"),
+              "cross_source_duplicate_candidates": duplicate_count,
+              "photo_map_probe": photo_probe,
+              "photo_map_inventory": photo_inventory,
+              "deterministic_temporal_claims": len(temporal_claims),
+              "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in temporal_claims)),
+              "provenance_backed_spatial_claims": len(spatial_claims),
+              "spatial_claim_kinds": dict(Counter(claim["location_kind"] for claim in spatial_claims)),
+              "entity_reference_claims": len(entity_claims),
+              "entity_relation_counts": dict(Counter(claim["role"] for claim in entity_claims)),
+              "research_task_count": len(tasks),
+              "research_task_counts": dict(Counter(task["task_type"] for task in tasks)),
+              "research_role_counts": dict(Counter(task["record_role"] for task in tasks)),
+              "rights_clearance_task_count": len(rights_tasks),
+              "sqlite_store": store_stats,
+              "highest_enrichment_priority": priorities[:10],
+              "highest_priority_research_tasks": tasks[:10],
+          }
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          Path("artifacts/reports/summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+      - name: Write manifest
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          files = []
+          for path in sorted(Path("artifacts").rglob("*")):
+              if path.is_file():
+                  data = path.read_bytes()
+                  files.append({"path": str(path), "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+          Path("artifacts/manifest.json").write_text(json.dumps({"files": files}, indent=2) + "\n", encoding="utf-8")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-corpus-sample
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
