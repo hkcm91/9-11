@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from archive.models import SourceItem
-from archive.work_queue import build_work_queue, tasks_for_item
+from archive.work_queue import build_rights_queue, build_work_queue, tasks_for_item
 
 
 def test_missing_time_and_location_create_specific_tasks() -> None:
@@ -19,6 +19,7 @@ def test_missing_time_and_location_create_specific_tasks() -> None:
     assert "resolve_time" in task_types
     assert "resolve_location" in task_types
     assert "resolve_creator" not in task_types
+    assert "resolve_rights" not in task_types
 
 
 def test_visual_location_task_requests_capture_location() -> None:
@@ -64,6 +65,24 @@ def test_repository_entry_does_not_generate_historical_research_tasks() -> None:
     assert "resolve_time" not in task_types
     assert "resolve_location" not in task_types
     assert "resolve_creator" not in task_types
+
+
+def test_rights_clearance_is_separate_from_default_research_queue() -> None:
+    item = SourceItem(
+        id="photo:rights",
+        source_id="source",
+        source_item_id="rights",
+        source_url="https://example.test/rights",
+        title_raw="Photo",
+        media_type_raw="photo",
+    )
+
+    research_types = {task.task_type for task in tasks_for_item(item)}
+    rights_tasks = build_rights_queue([item])
+
+    assert "resolve_rights" not in research_types
+    assert len(rights_tasks) == 1
+    assert rights_tasks[0].task_type == "resolve_rights"
 
 
 def test_task_ids_are_stable() -> None:
