@@ -9,8 +9,10 @@ from archive.adapters import ArcGisPhotoMapAdapter, InternetArchiveAdapter, Nist
 from archive.corpus import load_jsonl, reconcile_source_snapshots
 from archive.dedupe import find_candidates
 from archive.derived import (
+    derive_entity_claims,
     derive_spatial_claims,
     derive_temporal_claims,
+    serialize_entity_claim,
     serialize_spatial_claim,
     serialize_temporal_claim,
 )
@@ -71,6 +73,10 @@ def build_parser() -> argparse.ArgumentParser:
     spatial_claims = subparsers.add_parser("derive-spatial-claims", help="Create provenance-backed spatial claims from structured geometry")
     spatial_claims.add_argument("inputs", nargs="+", type=Path)
     spatial_claims.add_argument("--output", type=Path, required=True)
+
+    entity_claims = subparsers.add_parser("derive-entity-claims", help="Create evidence-backed person/organization references")
+    entity_claims.add_argument("inputs", nargs="+", type=Path)
+    entity_claims.add_argument("--output", type=Path, required=True)
 
     work_queue = subparsers.add_parser("build-work-queue", help="Create evidence-focused AI enrichment tasks")
     work_queue.add_argument("inputs", nargs="+", type=Path)
@@ -169,6 +175,13 @@ def main(argv: list[str] | None = None) -> int:
         claims = derive_spatial_claims(records)
         _write_jsonl(args.output, claims, serialize_spatial_claim)
         print(f"wrote {len(claims)} provenance-backed spatial claims to {args.output}")
+        return 0
+
+    if args.command == "derive-entity-claims":
+        records = _load_many(args.inputs)
+        claims = derive_entity_claims(records)
+        _write_jsonl(args.output, claims, serialize_entity_claim)
+        print(f"wrote {len(claims)} entity-reference claims to {args.output}")
         return 0
 
     if args.command == "build-work-queue":
