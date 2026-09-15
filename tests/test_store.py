@@ -4,7 +4,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from archive.models import SourceItem
+from archive.proposals import validate_proposal
 from archive.store import ArchiveStore
 
 
@@ -127,10 +130,68 @@ def test_import_claim_jsonl_populates_claim_tables(tmp_path: Path) -> None:
     assert stats["entity_claims"] == 1
 
 
+def _proposal():
+    return validate_proposal({
+        "agent_name": "geolocation-agent",
+        "agent_version": "1.0",
+        "task_id": "task:resolve_location:abc",
+        "subject_id": "source:item-1",
+        "proposal_type": "spatial_claim",
+        "proposal_value": {
+            "location_kind": "capture_location",
+            "latitude": 40.71,
+            "longitude": -74.01,
+        },
+        "confidence": 0.8,
+        "evidence": [{"source_item_id": "source:item-1", "relationship": "supports"}],
+    })
+
+
+def test_proposal_requires_review_before_verification(tmp_path: Path) -> None:
+    proposal = _proposal()
+    with ArchiveStore(tmp_path / "archive.sqlite") as store:
+        store.put_proposal(proposal)
+        with pytest.raises(ValueError, match="reviewed before"):
+            store.review_proposal(proposal.proposal_id, reviewer="researcher", new_status="verified")
+
+        first_review = store.review_proposal(
+            proposal.proposal_id,
+            reviewer="researcher",
+            new_status="reviewed",
+            note="Evidence checked against source.",
+        )
+        second_review = store.review_proposal(
+            proposal.proposal_id,
+            reviewer="senior-reviewer",
+            new_status="verified",
+            note="Independent verification complete.",
+        )
+        row = store.connection.execute(
+            "SELECT review_status FROM agent_proposals WHERE proposal_id = ?",
+            (proposal.proposal_id,),
+        ).fetchone()
+        stats = store.stats()
+
+    assert first_review.startswith("review:")
+    assert second_review.startswith("review:")
+    assert row["review_status"] == "verified"
+    assert stats["agent_proposals"] == 1
+    assert stats["proposal_reviews"] == 2
+
+
+def test_rejected_proposal_is_terminal(tmp_path: Path) -> None:
+    proposal = _proposal()
+    with ArchiveStore(tmp_path / "archive.sqlite") as store:
+        store.put_proposal(proposal)
+        store.review_proposal(proposal.proposal_id, reviewer="researcher", new_status="rejected")
+        with pytest.raises(ValueError, match="terminal"):
+            store.review_proposal(proposal.proposal_id, reviewer="researcher", new_status="reviewed")
+
+
 def test_schema_version_is_recorded(tmp_path: Path) -> None:
     with ArchiveStore(tmp_path / "archive.sqlite") as store:
         version = store.connection.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()[0]
 
-    assert version == "2"
+    assert version == "3"
