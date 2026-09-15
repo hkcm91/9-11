@@ -58,6 +58,8 @@ class EntityRole(StrEnum):
     SUBJECT = "subject"
     INTERVIEWEE = "interviewee"
     CREATOR = "creator"
+    PHOTOGRAPHER = "photographer"
+    VIDEOGRAPHER = "videographer"
     BROADCASTER = "broadcaster"
     WITNESS = "witness"
     RESPONDER = "responder"
