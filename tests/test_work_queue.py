@@ -45,10 +45,12 @@ def test_fdny_plan_uses_deterministic_coverage_date_and_skips_geolocation() -> N
         source_url="https://911digitalarchive.org/items/show/1751",
         title_raw="Incident Action Plan: 10/16/01 - 10/17/01",
         collection_raw="11",
+        metadata_raw={"collection_id": 11},
     )
     task_types = {task.task_type for task in tasks_for_item(item)}
     assert "resolve_time" not in task_types
     assert "resolve_location" not in task_types
+    assert "classify_media" not in task_types
     assert "resolve_creator" in task_types
 
 
@@ -65,6 +67,52 @@ def test_repository_entry_does_not_generate_historical_research_tasks() -> None:
     assert "resolve_time" not in task_types
     assert "resolve_location" not in task_types
     assert "resolve_creator" not in task_types
+
+
+def test_tv_archive_item_is_broadcast_anchor_not_camera_geolocation_task() -> None:
+    item = SourceItem(
+        id="internet-archive-understanding-911:tv-1",
+        source_id="internet-archive-understanding-911",
+        source_item_id="tv-1",
+        source_url="https://archive.org/details/tv-1",
+        title_raw="Television coverage",
+        creator_raw="NHK",
+        date_raw="2001-09-11",
+        media_type_raw="movies",
+        metadata_raw={"start_time": "2001-09-11 12:00:00", "stop_time": "2001-09-11 12:30:00"},
+    )
+
+    tasks = tasks_for_item(item)
+    assert {task.record_role for task in tasks} <= {"broadcast"}
+    assert "resolve_location" not in {task.task_type for task in tasks}
+    assert "classify_media" not in {task.task_type for task in tasks}
+
+
+def test_known_911da_collection_role_suppresses_generic_classification() -> None:
+    voices = SourceItem(
+        id="voice:1",
+        source_id="september-11-digital-archive",
+        source_item_id="1",
+        source_url="https://example.test/voice/1",
+        title_raw="V001 Jane Doe.mov",
+        metadata_raw={"collection_id": 267},
+    )
+    sonic = SourceItem(
+        id="audio:1",
+        source_id="september-11-digital-archive",
+        source_item_id="2",
+        source_url="https://example.test/audio/1",
+        title_raw="Audio record",
+        metadata_raw={"collection_id": 266},
+    )
+
+    voice_tasks = tasks_for_item(voices)
+    sonic_tasks = tasks_for_item(sonic)
+
+    assert {task.record_role for task in voice_tasks} <= {"testimony"}
+    assert {task.record_role for task in sonic_tasks} <= {"audio"}
+    assert "classify_media" not in {task.task_type for task in voice_tasks}
+    assert "classify_media" not in {task.task_type for task in sonic_tasks}
 
 
 def test_rights_clearance_is_separate_from_default_research_queue() -> None:
