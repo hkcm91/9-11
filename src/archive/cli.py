@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from archive.adapters import InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
+from archive.adapters import ArcGisPhotoMapAdapter, InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
 from archive.corpus import load_jsonl
 from archive.dedupe import find_candidates
 from archive.derived import derive_temporal_claims, serialize_temporal_claim
@@ -38,6 +38,10 @@ def build_parser() -> argparse.ArgumentParser:
     sample_nist = subparsers.add_parser("sample-nist", help="Inventory public NIST WTC repository entry points")
     sample_nist.add_argument("--output", type=Path, required=True)
     sample_nist.add_argument("--delay", type=float, default=0.5)
+
+    sample_photo_map = subparsers.add_parser("sample-photo-map", help="Sample geolocated metadata from the public archDisk ArcGIS map")
+    _add_output_args(sample_photo_map, default_delay=0.25)
+    sample_photo_map.add_argument("--app-id", default="1b7d4d22866b445881b181614e25d4d4")
 
     sources = subparsers.add_parser("list-sources", help="List enabled Phase 0 sources")
     sources.add_argument("--registry", type=Path, default=Path("config/sources.phase0.yaml"))
@@ -102,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
         records = adapter.sample()
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} NIST repository records to {args.output}")
+        return 0
+
+    if args.command == "sample-photo-map":
+        adapter = ArcGisPhotoMapAdapter(app_id=args.app_id, request_delay_s=args.delay)
+        records = adapter.sample(limit=args.limit)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} geolocated photo-map records to {args.output}")
         return 0
 
     if args.command == "list-sources":
