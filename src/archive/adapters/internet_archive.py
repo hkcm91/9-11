@@ -107,6 +107,44 @@ class InternetArchiveAdapter:
             return str(value).strip() or None
         return None
 
+    @staticmethod
+    def _file_summary(payload: dict[str, Any]) -> dict[str, Any]:
+        files = payload.get("files")
+        if not isinstance(files, list):
+            return {"file_count": 0, "formats": [], "duration_candidates": []}
+        formats: set[str] = set()
+        durations: list[str] = []
+        original_count = 0
+        for file in files:
+            if not isinstance(file, dict):
+                continue
+            fmt = file.get("format")
+            if isinstance(fmt, str) and fmt.strip():
+                formats.add(fmt.strip())
+            if file.get("source") == "original":
+                original_count += 1
+            length = file.get("length")
+            if isinstance(length, (str, int, float)) and str(length).strip():
+                durations.append(str(length).strip())
+        return {
+            "file_count": len(files),
+            "original_file_count": original_count,
+            "formats": sorted(formats),
+            "duration_candidates": durations[:25],
+        }
+
+    def enrich_search_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        identifier = self._string(item.get("identifier"))
+        if not identifier:
+            raise InternetArchiveAdapterError("Internet Archive item is missing identifier")
+        payload = self.fetch_item_metadata(identifier)
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        merged = dict(item)
+        merged.update(metadata)
+        merged["_archive_metadata"] = metadata
+        merged["_file_summary"] = self._file_summary(payload)
+        return merged
+
     def normalize(self, item: dict[str, Any]) -> SourceItem:
         identifier = self._string(item.get("identifier"))
         if not identifier:
@@ -129,10 +167,15 @@ class InternetArchiveAdapter:
             ingested_at=datetime.now(timezone.utc),
         )
 
-    def sample(self, *, limit: int = 50) -> list[SourceItem]:
+    def sample(self, *, limit: int = 50, enrich: bool = False) -> list[SourceItem]:
         if limit < 1:
             raise ValueError("limit must be >= 1")
-        return [self.normalize(item) for item in self.iter_items(max_items=limit)]
+        records: list[SourceItem] = []
+        for item in self.iter_items(max_items=limit):
+            if enrich:
+                item = self.enrich_search_item(item)
+            records.append(self.normalize(item))
+        return records
 
     @staticmethod
     def serialize_source_item(item: SourceItem) -> dict[str, Any]:
