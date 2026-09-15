@@ -1,12 +1,28 @@
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from archive.adapters.nist_organized import temporal_claim_from_nist_row
 from archive.heuristics import document_coverage_claim_from_title
-from archive.models import EvidenceRef, LocationKind, SourceItem, SpatialClaim, TemporalClaim, TimeKind
+from archive.models import (
+    EntityKind,
+    EntityReferenceClaim,
+    EntityRole,
+    EvidenceRef,
+    LocationKind,
+    SourceItem,
+    SpatialClaim,
+    TemporalClaim,
+    TimeKind,
+)
+
+_VOICES_FILENAME_RE = re.compile(
+    r"^V\d+\s+(?P<name>.+?)(?:\.(?:mov|mp4|m4v|avi)){1,2}$",
+    re.IGNORECASE,
+)
 
 
 def _parse_ia_utc_datetime(value: Any) -> datetime | None:
@@ -59,13 +75,7 @@ def _internet_archive_recording_claim(item: SourceItem) -> TemporalClaim | None:
 
 
 def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]:
-    """Run deterministic, evidence-preserving temporal derivations.
-
-    These are claims, never replacements for SourceItem.date_raw. Only narrow
-    transformations with explicit source evidence belong here; uncertain work
-    stays in the agent proposal/review pipeline.
-    """
-
+    """Run deterministic, evidence-preserving temporal derivations."""
     claims: list[TemporalClaim] = []
     for item in records:
         claim = document_coverage_claim_from_title(item)
@@ -84,13 +94,7 @@ def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]
 
 
 def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
-    """Create provenance-backed spatial claims from structured source geometry.
-
-    Community-curated coordinates are useful seed evidence, but they are not
-    promoted to verified truth. Accuracy radius remains unset until the source
-    or later review provides an evidence-backed precision estimate.
-    """
-
+    """Create provenance-backed spatial claims from structured source geometry."""
     claims: list[SpatialClaim] = []
     for item in records:
         if item.source_id != "archdisk-911-photo-map":
@@ -127,6 +131,67 @@ def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
     return claims
 
 
+def derive_entity_claims(records: Iterable[SourceItem]) -> list[EntityReferenceClaim]:
+    """Derive narrow entity references from explicit source naming conventions."""
+    claims: list[EntityReferenceClaim] = []
+    for item in records:
+        collection_id = item.metadata_raw.get("collection_id")
+        if item.source_id == "september-11-digital-archive" and collection_id == 267:
+            title = (item.title_raw or "").strip()
+            match = _VOICES_FILENAME_RE.match(title)
+            if match:
+                name = " ".join(match.group("name").split())
+                if name:
+                    claims.append(
+                        EntityReferenceClaim(
+                            subject_id=item.id,
+                            entity_kind=EntityKind.PERSON,
+                            role=EntityRole.INTERVIEWEE,
+                            name_raw=name,
+                            normalized_name=name,
+                            confidence=0.95,
+                            method="voices_911_filename_convention",
+                            created_by_agent="deterministic-entity-parser",
+                            evidence=[
+                                EvidenceRef(
+                                    source_item_id=item.id,
+                                    relationship="interviewee_filename",
+                                    note=f"Interviewee name parsed from Voices of 9.11 source filename: {title}",
+                                    weight=0.95,
+                                )
+                            ],
+                        )
+                    )
+
+        if item.source_id == "internet-archive-understanding-911":
+            contributor = item.metadata_raw.get("contributor")
+            if isinstance(contributor, list):
+                contributor = "; ".join(str(value) for value in contributor if value)
+            if isinstance(contributor, str) and contributor.strip():
+                name = contributor.strip()
+                claims.append(
+                    EntityReferenceClaim(
+                        subject_id=item.id,
+                        entity_kind=EntityKind.ORGANIZATION,
+                        role=EntityRole.BROADCASTER,
+                        name_raw=name,
+                        normalized_name=name,
+                        confidence=0.99,
+                        method="internet_archive_contributor_metadata",
+                        created_by_agent="deterministic-entity-parser",
+                        evidence=[
+                            EvidenceRef(
+                                source_item_id=item.id,
+                                relationship="broadcaster_metadata",
+                                note="Broadcaster preserved from Internet Archive contributor metadata.",
+                                weight=0.99,
+                            )
+                        ],
+                    )
+                )
+    return claims
+
+
 def serialize_temporal_claim(claim: TemporalClaim) -> dict[str, Any]:
     payload = asdict(claim)
     payload["time_kind"] = claim.time_kind.value
@@ -141,5 +206,13 @@ def serialize_temporal_claim(claim: TemporalClaim) -> dict[str, Any]:
 def serialize_spatial_claim(claim: SpatialClaim) -> dict[str, Any]:
     payload = asdict(claim)
     payload["location_kind"] = claim.location_kind.value
+    payload["status"] = claim.status.value
+    return payload
+
+
+def serialize_entity_claim(claim: EntityReferenceClaim) -> dict[str, Any]:
+    payload = asdict(claim)
+    payload["entity_kind"] = claim.entity_kind.value
+    payload["role"] = claim.role.value
     payload["status"] = claim.status.value
     return payload
