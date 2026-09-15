@@ -26,6 +26,15 @@ jobs:
         run: |
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.2 --output artifacts/raw/nist-repository.jsonl
+      - name: Probe archDisk geolocated photo metadata
+        run: |
+          rm -f artifacts/raw/archdisk-photo-map.jsonl
+          if archive-ingest sample-photo-map --limit 25 --delay 0.15 --output artifacts/raw/archdisk-photo-map.jsonl; then
+            printf '{"status":"success"}\n' > artifacts/reports/photo-map-probe.json
+          else
+            rm -f artifacts/raw/archdisk-photo-map.jsonl
+            printf '{"status":"failed"}\n' > artifacts/reports/photo-map-probe.json
+          fi
       - name: Collect Voices of 9.11 detailed metadata
         run: |
           archive-ingest sample-911da --collection 267 --details --limit 20 --delay 0.2 --output artifacts/raw/911da-voices.jsonl
@@ -68,6 +77,7 @@ jobs:
           priorities = [json.loads(line) for line in Path("artifacts/reports/enrichment-priority.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           tasks = [json.loads(line) for line in Path("artifacts/reports/work-queue.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           claims = [json.loads(line) for line in Path("artifacts/reports/temporal-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          photo_probe = json.loads(Path("artifacts/reports/photo-map-probe.json").read_text(encoding="utf-8"))
           raw_counts = {}
           for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
               raw_counts[path.name] = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
@@ -77,6 +87,7 @@ jobs:
               "source_counts": profile.get("source_counts"),
               "populated_percent": profile.get("populated_percent"),
               "duplicate_candidates": duplicate_count,
+              "photo_map_probe": photo_probe,
               "deterministic_temporal_claims": len(claims),
               "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in claims)),
               "work_queue_task_counts": dict(Counter(task["task_type"] for task in tasks)),
