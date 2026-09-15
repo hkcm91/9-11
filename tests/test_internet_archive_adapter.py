@@ -70,19 +70,23 @@ def test_iter_items_stops_at_limit(monkeypatch) -> None:
     assert calls == [1, 2]
 
 
-def test_file_summary_tracks_formats_originals_and_lengths() -> None:
+def test_file_summary_tracks_formats_originals_lengths_and_sidecars() -> None:
     payload = {
         "files": [
             {"name": "a.mp4", "format": "MPEG4", "source": "original", "length": "00:30:00"},
             {"name": "a.ogv", "format": "Ogg Video", "source": "derivative", "length": "1800"},
+            {"name": "a.vtt", "format": "WebVTT", "source": "derivative"},
         ]
     }
     summary = InternetArchiveAdapter._file_summary(payload)
 
-    assert summary["file_count"] == 2
+    assert summary["file_count"] == 3
     assert summary["original_file_count"] == 1
-    assert summary["formats"] == ["MPEG4", "Ogg Video"]
+    assert summary["formats"] == ["MPEG4", "Ogg Video", "WebVTT"]
     assert summary["duration_candidates"] == ["00:30:00", "1800"]
+    assert summary["transcript_files"] == ["a.vtt"]
+    assert summary["transcript_file_count"] == 1
+    assert "a.mp4" in summary["primary_media_files"]
 
 
 def test_enrich_search_item_merges_full_metadata(monkeypatch) -> None:
