@@ -55,6 +55,16 @@ jobs:
           archive-ingest build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
           archive-ingest build-rights-queue artifacts/raw/*.jsonl --output artifacts/reports/rights-queue.jsonl
 
+      - name: Materialize SQLite evidence store
+        run: |
+          archive-ingest build-store \
+            --database artifacts/archive.sqlite \
+            --records artifacts/raw/*.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
+
       - name: Write scale summary and manifest
         run: |
           python - <<'PY'
@@ -69,6 +79,7 @@ jobs:
               return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
 
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
+          store_stats = json.loads(Path("artifacts/reports/store-stats.json").read_text(encoding="utf-8"))
           temporal = read_jsonl("artifacts/reports/temporal-claims.jsonl")
           spatial = read_jsonl("artifacts/reports/spatial-claims.jsonl")
           entities = read_jsonl("artifacts/reports/entity-claims.jsonl")
@@ -92,10 +103,11 @@ jobs:
               "spatial_claims": len(spatial),
               "spatial_claim_kinds": dict(Counter(x["location_kind"] for x in spatial)),
               "entity_claims": len(entities),
-              "entity_relation_counts": dict(Counter(x["relation"] for x in entities)),
+              "entity_relation_counts": dict(Counter(x["role"] for x in entities)),
               "research_tasks": len(research),
               "research_task_counts": dict(Counter(x["task_type"] for x in research)),
               "rights_clearance_tasks": len(rights),
+              "sqlite_store": store_stats,
           }
           Path("artifacts/reports/scale-summary.json").write_text(
               json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
