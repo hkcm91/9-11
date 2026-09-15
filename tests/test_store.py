@@ -61,6 +61,24 @@ def test_exact_duplicate_observation_is_not_counted_twice(tmp_path: Path) -> Non
     assert stats["source_observations"] == 1
 
 
+def test_same_raw_payload_with_new_normalization_is_preserved(tmp_path: Path) -> None:
+    first = make_item(title="Title", description=None, metadata={"id": 1, "raw": "same"})
+    second = make_item(title="Title", description="New parser recovered this", metadata={"id": 1, "raw": "same"})
+
+    with ArchiveStore(tmp_path / "archive.sqlite") as store:
+        store.put_source_item(first)
+        store.put_source_item(second)
+        stats = store.stats()
+        digests = store.connection.execute(
+            "SELECT raw_digest, normalized_digest FROM source_observations ORDER BY observation_id"
+        ).fetchall()
+
+    assert stats["source_records"] == 1
+    assert stats["source_observations"] == 2
+    assert len({row["raw_digest"] for row in digests}) == 1
+    assert len({row["normalized_digest"] for row in digests}) == 2
+
+
 def test_import_claim_jsonl_populates_claim_tables(tmp_path: Path) -> None:
     temporal = tmp_path / "temporal.jsonl"
     spatial = tmp_path / "spatial.jsonl"
@@ -115,4 +133,4 @@ def test_schema_version_is_recorded(tmp_path: Path) -> None:
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()[0]
 
-    assert version == "1"
+    assert version == "2"
