@@ -19,6 +19,7 @@ from archive.derived import (
 from archive.profiling import profile_records
 from archive.quality import prioritize_records
 from archive.registry import enabled_sources
+from archive.store import ArchiveStore
 from archive.work_queue import build_rights_queue, build_work_queue
 
 
@@ -90,6 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
     rights_queue = subparsers.add_parser("build-rights-queue", help="Create separate publication/rights-clearance tasks")
     rights_queue.add_argument("inputs", nargs="+", type=Path)
     rights_queue.add_argument("--output", type=Path, required=True)
+
+    store = subparsers.add_parser("build-store", help="Materialize source observations and claims into SQLite")
+    store.add_argument("--database", type=Path, required=True)
+    store.add_argument("--records", nargs="+", type=Path, required=True)
+    store.add_argument("--temporal", type=Path, default=None)
+    store.add_argument("--spatial", type=Path, default=None)
+    store.add_argument("--entities", type=Path, default=None)
+    store.add_argument("--stats-output", type=Path, default=None)
     return parser
 
 
@@ -213,6 +222,29 @@ def main(argv: list[str] | None = None) -> int:
         tasks = build_rights_queue(records)
         _write_jsonl(args.output, tasks, asdict)
         print(f"wrote {len(tasks)} publication/rights-clearance tasks to {args.output}")
+        return 0
+
+    if args.command == "build-store":
+        args.database.parent.mkdir(parents=True, exist_ok=True)
+        with ArchiveStore(args.database) as store:
+            observations = store.import_source_jsonl(args.records)
+            temporal = store.import_claim_jsonl(args.temporal, "temporal") if args.temporal else 0
+            spatial = store.import_claim_jsonl(args.spatial, "spatial") if args.spatial else 0
+            entities = store.import_claim_jsonl(args.entities, "entity") if args.entities else 0
+            stats = store.stats()
+        payload = {
+            "database": str(args.database),
+            "imported_observations": observations,
+            "imported_temporal_claims": temporal,
+            "imported_spatial_claims": spatial,
+            "imported_entity_claims": entities,
+            "table_counts": stats,
+        }
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if args.stats_output:
+            args.stats_output.parent.mkdir(parents=True, exist_ok=True)
+            args.stats_output.write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
         return 0
 
     return 2
