@@ -53,7 +53,7 @@ jobs:
       - name: Profile combined corpus
         run: |
           archive-ingest profile-jsonl artifacts/raw/*.jsonl --output artifacts/reports/profile.json
-      - name: Propose duplicate candidates
+      - name: Propose cross-source duplicate candidates
         run: |
           archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
       - name: Derive deterministic temporal claims
@@ -62,44 +62,62 @@ jobs:
       - name: Derive provenance-backed spatial claims
         run: |
           archive-ingest derive-spatial-claims artifacts/raw/*.jsonl --output artifacts/reports/spatial-claims.jsonl
+      - name: Derive entity-reference claims
+        run: |
+          archive-ingest derive-entity-claims artifacts/raw/*.jsonl --output artifacts/reports/entity-claims.jsonl
       - name: Rank enrichment work
         run: |
           archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
-      - name: Build agent work queue
+      - name: Build historical research queue
         run: |
           archive-ingest build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
+      - name: Build separate rights-clearance queue
+        run: |
+          archive-ingest build-rights-queue artifacts/raw/*.jsonl --output artifacts/reports/rights-queue.jsonl
       - name: Publish corpus quality summary
         run: |
           python - <<'PY'
           import json
           from collections import Counter
           from pathlib import Path
+
+          def jsonl(path):
+              return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
-          duplicate_path = Path("artifacts/reports/duplicate-candidates.jsonl")
-          duplicate_count = sum(1 for line in duplicate_path.read_text(encoding="utf-8").splitlines() if line.strip())
-          priorities = [json.loads(line) for line in Path("artifacts/reports/enrichment-priority.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-          tasks = [json.loads(line) for line in Path("artifacts/reports/work-queue.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-          temporal_claims = [json.loads(line) for line in Path("artifacts/reports/temporal-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-          spatial_claims = [json.loads(line) for line in Path("artifacts/reports/spatial-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          duplicate_count = len(jsonl("artifacts/reports/duplicate-candidates.jsonl"))
+          priorities = jsonl("artifacts/reports/enrichment-priority.jsonl")
+          tasks = jsonl("artifacts/reports/work-queue.jsonl")
+          rights_tasks = jsonl("artifacts/reports/rights-queue.jsonl")
+          temporal_claims = jsonl("artifacts/reports/temporal-claims.jsonl")
+          spatial_claims = jsonl("artifacts/reports/spatial-claims.jsonl")
+          entity_claims = jsonl("artifacts/reports/entity-claims.jsonl")
           photo_probe = json.loads(Path("artifacts/reports/photo-map-probe.json").read_text(encoding="utf-8"))
+
           raw_counts = {}
           for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
               raw_counts[path.name] = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
           summary = {
               "records_by_file": raw_counts,
-              "total_records": profile.get("total_records"),
+              "raw_observations": sum(raw_counts.values()),
+              "unique_reconciled_records": profile.get("total_records"),
               "source_counts": profile.get("source_counts"),
               "populated_percent": profile.get("populated_percent"),
-              "duplicate_candidates": duplicate_count,
+              "cross_source_duplicate_candidates": duplicate_count,
               "photo_map_probe": photo_probe,
               "deterministic_temporal_claims": len(temporal_claims),
               "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in temporal_claims)),
               "provenance_backed_spatial_claims": len(spatial_claims),
               "spatial_claim_kinds": dict(Counter(claim["location_kind"] for claim in spatial_claims)),
-              "work_queue_task_counts": dict(Counter(task["task_type"] for task in tasks)),
-              "work_queue_role_counts": dict(Counter(task["record_role"] for task in tasks)),
+              "entity_reference_claims": len(entity_claims),
+              "entity_relation_counts": dict(Counter(claim["relation"] for claim in entity_claims)),
+              "research_task_count": len(tasks),
+              "research_task_counts": dict(Counter(task["task_type"] for task in tasks)),
+              "research_role_counts": dict(Counter(task["record_role"] for task in tasks)),
+              "rights_clearance_task_count": len(rights_tasks),
               "highest_enrichment_priority": priorities[:10],
-              "highest_priority_tasks": tasks[:10],
+              "highest_priority_research_tasks": tasks[:10],
           }
           print(json.dumps(summary, indent=2, sort_keys=True))
           Path("artifacts/reports/summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
