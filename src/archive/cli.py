@@ -8,7 +8,12 @@ from pathlib import Path
 from archive.adapters import ArcGisPhotoMapAdapter, InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
 from archive.corpus import load_jsonl
 from archive.dedupe import find_candidates
-from archive.derived import derive_temporal_claims, serialize_temporal_claim
+from archive.derived import (
+    derive_spatial_claims,
+    derive_temporal_claims,
+    serialize_spatial_claim,
+    serialize_temporal_claim,
+)
 from archive.profiling import profile_records
 from archive.quality import prioritize_records
 from archive.registry import enabled_sources
@@ -59,9 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
     prioritize.add_argument("inputs", nargs="+", type=Path)
     prioritize.add_argument("--output", type=Path, required=True)
 
-    claims = subparsers.add_parser("derive-temporal-claims", help="Create deterministic evidence-backed temporal claims")
-    claims.add_argument("inputs", nargs="+", type=Path)
-    claims.add_argument("--output", type=Path, required=True)
+    temporal_claims = subparsers.add_parser("derive-temporal-claims", help="Create deterministic evidence-backed temporal claims")
+    temporal_claims.add_argument("inputs", nargs="+", type=Path)
+    temporal_claims.add_argument("--output", type=Path, required=True)
+
+    spatial_claims = subparsers.add_parser("derive-spatial-claims", help="Create provenance-backed spatial claims from structured geometry")
+    spatial_claims.add_argument("inputs", nargs="+", type=Path)
+    spatial_claims.add_argument("--output", type=Path, required=True)
 
     work_queue = subparsers.add_parser("build-work-queue", help="Create evidence-focused AI enrichment tasks")
     work_queue.add_argument("inputs", nargs="+", type=Path)
@@ -150,9 +159,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "derive-temporal-claims":
         records = _load_many(args.inputs)
-        temporal_claims = derive_temporal_claims(records)
-        _write_jsonl(args.output, temporal_claims, serialize_temporal_claim)
-        print(f"wrote {len(temporal_claims)} deterministic temporal claims to {args.output}")
+        claims = derive_temporal_claims(records)
+        _write_jsonl(args.output, claims, serialize_temporal_claim)
+        print(f"wrote {len(claims)} deterministic temporal claims to {args.output}")
+        return 0
+
+    if args.command == "derive-spatial-claims":
+        records = _load_many(args.inputs)
+        claims = derive_spatial_claims(records)
+        _write_jsonl(args.output, claims, serialize_spatial_claim)
+        print(f"wrote {len(claims)} provenance-backed spatial claims to {args.output}")
         return 0
 
     if args.command == "build-work-queue":
