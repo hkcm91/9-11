@@ -18,7 +18,6 @@ DEFAULT_APP_ID = "1b7d4d22866b445881b181614e25d4d4"
 DEFAULT_ARCGIS_ROOT = "https://www.arcgis.com/sharing/rest"
 DEFAULT_USER_AGENT = "nine-eleven-archive/0.1 metadata-research; contact=https://github.com/hkcm91/9-11"
 _ITEM_ID_RE = re.compile(r"^[0-9a-fA-F]{32}$")
-_ITEM_ID_SEARCH_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
 
 
 class ArcGisPhotoMapError(RuntimeError):
@@ -26,12 +25,11 @@ class ArcGisPhotoMapError(RuntimeError):
 
 
 class ArcGisPhotoMapAdapter:
-    """Resolve a public ArcGIS Instant App into geospatial feature metadata.
+    """Resolve the public archDisk ArcGIS app into geospatial photo metadata.
 
-    The adapter is intentionally attachment-free: it inventories app/web-map
-    structure and queries point-feature attributes + geometry only. Photograph
-    attachments remain at the custodial source unless a later rights-aware
-    stage explicitly decides otherwise.
+    The adapter intentionally ignores attachments and non-point context layers.
+    Building footprints and other map reference geometry are useful to the UI,
+    but they are not photographs and must not enter the historical media corpus.
     """
 
     def __init__(
@@ -65,7 +63,7 @@ class ArcGisPhotoMapAdapter:
         request_url = f"{url}{'&' if '?' in url else '?'}{query}" if query else url
         req = Request(request_url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
         try:
-            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - public configured endpoints
+            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310
                 body = response.read().decode("utf-8")
         except Exception as exc:
             raise ArcGisPhotoMapError(f"failed to fetch {request_url}: {exc}") from exc
@@ -100,31 +98,21 @@ class ArcGisPhotoMapAdapter:
         elif isinstance(value, list):
             for nested in value:
                 found.update(ArcGisPhotoMapAdapter._candidate_ids(nested))
-        elif isinstance(value, str):
-            text = value.strip()
-            if _ITEM_ID_RE.match(text):
-                found.add(text)
-            else:
-                found.update(match.group(1) for match in _ITEM_ID_SEARCH_RE.finditer(text))
+        elif isinstance(value, str) and _ITEM_ID_RE.match(value.strip()):
+            found.add(value.strip())
         return found
 
     def discover_web_maps(self) -> list[dict[str, Any]]:
         app_data = self.fetch_item_data(self.app_id)
         candidates = self._candidate_ids(app_data)
         results: list[dict[str, Any]] = []
-        inaccessible: list[str] = []
         for item_id in sorted(candidates):
             try:
                 item = self.fetch_item(item_id)
             except ArcGisPhotoMapError:
-                # ArcGIS Instant App configs can retain stale, deleted, or
-                # private item references. One inaccessible reference must not
-                # prevent discovery of other public Web Maps.
-                inaccessible.append(item_id)
+                # Instant Apps can retain stale/private item references.
                 continue
             if str(item.get("type") or "").lower() == "web map":
-                item = dict(item)
-                item["_discovery_inaccessible_candidates"] = list(inaccessible)
                 results.append(item)
         return results
 
@@ -149,10 +137,7 @@ class ArcGisPhotoMapAdapter:
         found: dict[str, dict[str, Any]] = {}
         for web_map in self.discover_web_maps():
             web_map_id = str(web_map.get("id"))
-            try:
-                data = self.fetch_item_data(web_map_id)
-            except ArcGisPhotoMapError:
-                continue
+            data = self.fetch_item_data(web_map_id)
             for layer in self._walk_layers(data):
                 url = layer.get("url")
                 item_id = layer.get("itemId")
@@ -185,11 +170,12 @@ class ArcGisPhotoMapAdapter:
                         }
         return list(found.values())
 
-    @staticmethod
-    def _layer_zero_url(service_url: str) -> str:
+    def _layer_zero_url(self, service_url: str) -> str:
         trimmed = service_url.rstrip("/")
         tail = trimmed.rsplit("/", 1)[-1]
-        return trimmed if tail.isdigit() else f"{trimmed}/0"
+        if tail.isdigit():
+            return trimmed
+        return f"{trimmed}/0"
 
     def query_features(self, layer_url: str, *, limit: int = 50) -> dict[str, Any]:
         if limit < 1 or limit > 2000:
@@ -218,11 +204,10 @@ class ArcGisPhotoMapAdapter:
 
     @classmethod
     def _geometry_wgs84(cls, geometry: Any, spatial_reference: Any = None) -> tuple[float | None, float | None]:
-        if not isinstance(geometry, dict):
+        if not cls._is_point_geometry(geometry):
             return None, None
+        assert isinstance(geometry, dict)
         x, y = geometry.get("x"), geometry.get("y")
-        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
-            return None, None
         sr = geometry.get("spatialReference") or spatial_reference or {}
         wkid = (sr.get("latestWkid") or sr.get("wkid")) if isinstance(sr, dict) else None
         if wkid in {3857, 102100, 102113}:
@@ -230,6 +215,14 @@ class ArcGisPhotoMapAdapter:
         if wkid in {4326, 4269} or (-180 <= x <= 180 and -90 <= y <= 90):
             return float(y), float(x)
         return None, None
+
+    @staticmethod
+    def _is_point_geometry(geometry: Any) -> bool:
+        return (
+            isinstance(geometry, dict)
+            and isinstance(geometry.get("x"), (int, float))
+            and isinstance(geometry.get("y"), (int, float))
+        )
 
     @staticmethod
     def _first_attr(attrs: dict[str, Any], names: tuple[str, ...]) -> str | None:
@@ -249,21 +242,34 @@ class ArcGisPhotoMapAdapter:
     ) -> SourceItem:
         attrs = feature.get("attributes") if isinstance(feature.get("attributes"), dict) else {}
         geometry = feature.get("geometry")
+        if not self._is_point_geometry(geometry):
+            raise ArcGisPhotoMapError("photo-map feature is not point geometry")
+
         lat, lon = self._geometry_wgs84(geometry, spatial_reference)
         object_id = self._first_attr(attrs, ("OBJECTID", "FID", "ObjectId", "GlobalID"))
         stable_material = json.dumps([layer.get("url"), attrs, geometry], sort_keys=True, default=str)
         fallback_id = hashlib.sha256(stable_material.encode("utf-8")).hexdigest()[:20]
         source_item_id = f"{layer.get('item_id') or layer.get('web_map_id')}:{object_id or fallback_id}"
-        title = self._first_attr(attrs, ("Title", "Name", "Photo", "Photographer", "Filename", "FileName"))
-        creator = self._first_attr(attrs, ("Photographer", "Creator", "Author", "Source", "Credit"))
-        date = self._first_attr(attrs, ("Date", "PhotoDate", "CaptureDate", "Time", "Timestamp"))
-        description = self._first_attr(attrs, ("Description", "Caption", "Notes", "Comments"))
+
+        # The current public archDisk layer uses Name for photographer, Address
+        # for the mapped camera position, and timeTaken for source-supplied time.
+        creator = self._first_attr(attrs, ("Photographer", "Creator", "Author", "Name", "Source", "Credit"))
+        title = self._first_attr(attrs, ("Title", "Photo", "Filename", "FileName", "Name"))
+        date = self._first_attr(attrs, ("Date", "PhotoDate", "CaptureDate", "timeTaken", "Time", "Timestamp"))
+        address = self._first_attr(attrs, ("Address", "Location"))
+        description = self._first_attr(attrs, ("notesExtended", "Description", "Caption", "Notes", "Comments"))
         rights = self._first_attr(attrs, ("Rights", "Copyright", "License", "Credit"))
+        source_reference = self._first_attr(attrs, ("sourceURL", "SourceURL", "URL"))
+
         metadata = {
             "arcgis_feature": feature,
             "arcgis_layer": layer,
             "resolved_latitude": lat,
             "resolved_longitude": lon,
+            "mapped_address": address,
+            "external_source_url": source_reference,
+            "time_taken_raw": self._first_attr(attrs, ("timeTaken",)),
+            "folder_path": self._first_attr(attrs, ("FolderPath",)),
         }
         return SourceItem(
             id=f"{SOURCE_ID}:{source_item_id}",
@@ -274,7 +280,7 @@ class ArcGisPhotoMapAdapter:
             description_raw=description,
             creator_raw=creator,
             date_raw=date,
-            location_raw=(f"{lat:.7f},{lon:.7f}" if lat is not None and lon is not None else None),
+            location_raw=address or (f"{lat:.7f},{lon:.7f}" if lat is not None and lon is not None else None),
             rights_raw=rights,
             collection_raw="archDisk 9/11 Photo Map",
             media_type_raw="photo",
@@ -289,24 +295,28 @@ class ArcGisPhotoMapAdapter:
         if not layers:
             raise ArcGisPhotoMapError("no public FeatureServer layer could be resolved from the ArcGIS app")
         records: list[SourceItem] = []
-        remaining = limit
         for layer in layers:
-            if remaining <= 0:
+            if len(records) >= limit:
                 break
+            # Query a little beyond the remaining target because mixed context
+            # layers can contain non-photo polygon features that we discard.
+            query_limit = min(2000, max(limit - len(records), 50))
             try:
-                payload = self.query_features(str(layer["url"]), limit=remaining)
+                payload = self.query_features(str(layer["url"]), limit=query_limit)
             except ArcGisPhotoMapError:
                 continue
             spatial_reference = payload.get("spatialReference")
             for feature in payload["features"]:
-                if not isinstance(feature, dict):
-                    continue
-                records.append(self.normalize_feature(feature, layer=layer, spatial_reference=spatial_reference))
-                remaining -= 1
-                if remaining <= 0:
+                if len(records) >= limit:
                     break
+                if not isinstance(feature, dict) or not self._is_point_geometry(feature.get("geometry")):
+                    continue
+                try:
+                    records.append(self.normalize_feature(feature, layer=layer, spatial_reference=spatial_reference))
+                except ArcGisPhotoMapError:
+                    continue
         if not records:
-            raise ArcGisPhotoMapError("public FeatureServer layers resolved but no point features were returned")
+            raise ArcGisPhotoMapError("public FeatureServer layers resolved but no point photo features were returned")
         return records
 
     @staticmethod
