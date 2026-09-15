@@ -43,6 +43,9 @@ jobs:
       - name: Propose duplicate candidates
         run: |
           archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
+      - name: Rank enrichment work
+        run: |
+          archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
       - name: Publish corpus quality summary
         run: |
           python - <<'PY'
@@ -51,6 +54,7 @@ jobs:
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
           duplicate_path = Path("artifacts/reports/duplicate-candidates.jsonl")
           duplicate_count = sum(1 for line in duplicate_path.read_text(encoding="utf-8").splitlines() if line.strip())
+          priorities = [json.loads(line) for line in Path("artifacts/reports/enrichment-priority.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           raw_counts = {}
           for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
               raw_counts[path.name] = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
@@ -60,6 +64,7 @@ jobs:
               "source_counts": profile.get("source_counts"),
               "populated_percent": profile.get("populated_percent"),
               "duplicate_candidates": duplicate_count,
+              "highest_enrichment_priority": priorities[:10],
           }
           print(json.dumps(summary, indent=2, sort_keys=True))
           Path("artifacts/reports/summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
