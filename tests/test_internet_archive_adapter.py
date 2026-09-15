@@ -33,6 +33,27 @@ def test_normalize_preserves_metadata() -> None:
     assert item.source_url.endswith("/details/sample-item")
 
 
+def test_contributor_is_used_as_broadcaster_when_creator_is_absent() -> None:
+    adapter = InternetArchiveAdapter(request_delay_s=0)
+    item = adapter.normalize({
+        "identifier": "nhk-sample",
+        "title": "Japan : NHK",
+        "contributor": "NHK",
+        "mediatype": "movies",
+    })
+    assert item.creator_raw == "NHK"
+
+
+def test_creator_takes_precedence_over_contributor() -> None:
+    adapter = InternetArchiveAdapter(request_delay_s=0)
+    item = adapter.normalize({
+        "identifier": "sample",
+        "creator": "Original Creator",
+        "contributor": "Custodial Broadcaster",
+    })
+    assert item.creator_raw == "Original Creator"
+
+
 def test_configured_collection_is_lineage_even_with_auxiliary_memberships() -> None:
     adapter = InternetArchiveAdapter(collection="TV-NHK", request_delay_s=0)
     item = adapter.normalize({"identifier": "x", "collection": ["TV-NHK", "911", "tvarchive", "fav-someone"]})
