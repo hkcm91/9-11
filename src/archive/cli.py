@@ -8,6 +8,7 @@ from pathlib import Path
 from archive.adapters import InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
 from archive.corpus import load_jsonl
 from archive.dedupe import find_candidates
+from archive.derived import derive_temporal_claims, serialize_temporal_claim
 from archive.profiling import profile_records
 from archive.quality import prioritize_records
 from archive.registry import enabled_sources
@@ -53,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     prioritize = subparsers.add_parser("prioritize-jsonl", help="Rank records for metadata enrichment work")
     prioritize.add_argument("inputs", nargs="+", type=Path)
     prioritize.add_argument("--output", type=Path, required=True)
+
+    claims = subparsers.add_parser("derive-temporal-claims", help="Create deterministic evidence-backed temporal claims")
+    claims.add_argument("inputs", nargs="+", type=Path)
+    claims.add_argument("--output", type=Path, required=True)
 
     work_queue = subparsers.add_parser("build-work-queue", help="Create evidence-focused AI enrichment tasks")
     work_queue.add_argument("inputs", nargs="+", type=Path)
@@ -130,6 +135,13 @@ def main(argv: list[str] | None = None) -> int:
         priorities = prioritize_records(records)
         _write_jsonl(args.output, priorities, asdict)
         print(f"wrote {len(priorities)} enrichment priorities to {args.output}")
+        return 0
+
+    if args.command == "derive-temporal-claims":
+        records = _load_many(args.inputs)
+        temporal_claims = derive_temporal_claims(records)
+        _write_jsonl(args.output, temporal_claims, serialize_temporal_claim)
+        print(f"wrote {len(temporal_claims)} deterministic temporal claims to {args.output}")
         return 0
 
     if args.command == "build-work-queue":
