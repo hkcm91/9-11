@@ -18,6 +18,7 @@ DEFAULT_APP_ID = "1b7d4d22866b445881b181614e25d4d4"
 DEFAULT_ARCGIS_ROOT = "https://www.arcgis.com/sharing/rest"
 DEFAULT_USER_AGENT = "nine-eleven-archive/0.1 metadata-research; contact=https://github.com/hkcm91/9-11"
 _ITEM_ID_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+_ITEM_ID_SEARCH_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
 
 
 class ArcGisPhotoMapError(RuntimeError):
@@ -99,17 +100,31 @@ class ArcGisPhotoMapAdapter:
         elif isinstance(value, list):
             for nested in value:
                 found.update(ArcGisPhotoMapAdapter._candidate_ids(nested))
-        elif isinstance(value, str) and _ITEM_ID_RE.match(value.strip()):
-            found.add(value.strip())
+        elif isinstance(value, str):
+            text = value.strip()
+            if _ITEM_ID_RE.match(text):
+                found.add(text)
+            else:
+                found.update(match.group(1) for match in _ITEM_ID_SEARCH_RE.finditer(text))
         return found
 
     def discover_web_maps(self) -> list[dict[str, Any]]:
         app_data = self.fetch_item_data(self.app_id)
         candidates = self._candidate_ids(app_data)
         results: list[dict[str, Any]] = []
+        inaccessible: list[str] = []
         for item_id in sorted(candidates):
-            item = self.fetch_item(item_id)
+            try:
+                item = self.fetch_item(item_id)
+            except ArcGisPhotoMapError:
+                # ArcGIS Instant App configs can retain stale, deleted, or
+                # private item references. One inaccessible reference must not
+                # prevent discovery of other public Web Maps.
+                inaccessible.append(item_id)
+                continue
             if str(item.get("type") or "").lower() == "web map":
+                item = dict(item)
+                item["_discovery_inaccessible_candidates"] = list(inaccessible)
                 results.append(item)
         return results
 
@@ -134,7 +149,10 @@ class ArcGisPhotoMapAdapter:
         found: dict[str, dict[str, Any]] = {}
         for web_map in self.discover_web_maps():
             web_map_id = str(web_map.get("id"))
-            data = self.fetch_item_data(web_map_id)
+            try:
+                data = self.fetch_item_data(web_map_id)
+            except ArcGisPhotoMapError:
+                continue
             for layer in self._walk_layers(data):
                 url = layer.get("url")
                 item_id = layer.get("itemId")
@@ -149,7 +167,10 @@ class ArcGisPhotoMapAdapter:
                         "raw_layer": layer,
                     }
                 elif isinstance(item_id, str) and _ITEM_ID_RE.match(item_id):
-                    item = self.fetch_item(item_id)
+                    try:
+                        item = self.fetch_item(item_id)
+                    except ArcGisPhotoMapError:
+                        continue
                     service_url = item.get("url")
                     if isinstance(service_url, str) and "featureserver" in service_url.lower():
                         key = service_url.rstrip("/")
@@ -272,7 +293,10 @@ class ArcGisPhotoMapAdapter:
         for layer in layers:
             if remaining <= 0:
                 break
-            payload = self.query_features(str(layer["url"]), limit=remaining)
+            try:
+                payload = self.query_features(str(layer["url"]), limit=remaining)
+            except ArcGisPhotoMapError:
+                continue
             spatial_reference = payload.get("spatialReference")
             for feature in payload["features"]:
                 if not isinstance(feature, dict):
@@ -281,6 +305,8 @@ class ArcGisPhotoMapAdapter:
                 remaining -= 1
                 if remaining <= 0:
                     break
+        if not records:
+            raise ArcGisPhotoMapError("public FeatureServer layers resolved but no point features were returned")
         return records
 
     @staticmethod
