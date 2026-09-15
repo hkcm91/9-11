@@ -43,6 +43,27 @@ class LocationKind(StrEnum):
     UNKNOWN = "unknown"
 
 
+class EntityKind(StrEnum):
+    PERSON = "person"
+    ORGANIZATION = "organization"
+    RESPONDER_UNIT = "responder_unit"
+    BUILDING = "building"
+    VEHICLE = "vehicle"
+    VESSEL = "vessel"
+    AIRCRAFT = "aircraft"
+    OTHER = "other"
+
+
+class EntityRole(StrEnum):
+    SUBJECT = "subject"
+    INTERVIEWEE = "interviewee"
+    CREATOR = "creator"
+    BROADCASTER = "broadcaster"
+    WITNESS = "witness"
+    RESPONDER = "responder"
+    MENTIONED = "mentioned"
+
+
 @dataclass(slots=True)
 class SourceItem:
     id: str
@@ -94,6 +115,20 @@ class SpatialClaim:
     accuracy_radius_m: float | None = None
     heading_deg: float | None = None
     heading_uncertainty_deg: float | None = None
+    confidence: float = 0.0
+    status: ReviewStatus = ReviewStatus.PROPOSED
+    method: str | None = None
+    created_by_agent: str | None = None
+    evidence: list[EvidenceRef] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class EntityReferenceClaim:
+    subject_id: str
+    entity_kind: EntityKind
+    role: EntityRole
+    name_raw: str
+    normalized_name: str | None = None
     confidence: float = 0.0
     status: ReviewStatus = ReviewStatus.PROPOSED
     method: str | None = None
