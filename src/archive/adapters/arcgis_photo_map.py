@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -177,23 +177,102 @@ class ArcGisPhotoMapAdapter:
             return trimmed
         return f"{trimmed}/0"
 
-    def query_features(self, layer_url: str, *, limit: int = 50) -> dict[str, Any]:
-        if limit < 1 or limit > 2000:
-            raise ValueError("limit must be between 1 and 2000")
+    def query_feature_count(self, layer_url: str) -> int:
         endpoint = f"{self._layer_zero_url(layer_url)}/query"
         payload = self._get_json_url(
             endpoint,
-            {
-                "where": "1=1",
-                "outFields": "*",
-                "returnGeometry": "true",
-                "resultRecordCount": limit,
-                "f": "json",
-            },
+            {"where": "1=1", "returnCountOnly": "true", "f": "json"},
         )
+        count = payload.get("count") if isinstance(payload, dict) else None
+        if not isinstance(count, int) or count < 0:
+            raise ArcGisPhotoMapError("ArcGIS count query did not return a non-negative integer")
+        return count
+
+    def query_object_ids(self, layer_url: str) -> list[int | str]:
+        """Return the complete stable object-id set, unaffected by transfer limits."""
+        endpoint = f"{self._layer_zero_url(layer_url)}/query"
+        payload = self._get_json_url(
+            endpoint,
+            {"where": "1=1", "returnIdsOnly": "true", "f": "json"},
+        )
+        object_ids = payload.get("objectIds") if isinstance(payload, dict) else None
+        if not isinstance(object_ids, list):
+            raise ArcGisPhotoMapError("ArcGIS ID query did not return objectIds")
+        # Keep IDs exactly as the service returns them but deduplicate while
+        # using string order as a stable fallback for mixed numeric/string IDs.
+        unique: dict[str, int | str] = {}
+        for object_id in object_ids:
+            if isinstance(object_id, (int, str)) and str(object_id).strip():
+                unique[str(object_id)] = object_id
+        return [unique[key] for key in sorted(unique, key=lambda value: (not value.isdigit(), int(value) if value.isdigit() else value))]
+
+    def query_features(
+        self,
+        layer_url: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        object_ids: list[int | str] | None = None,
+    ) -> dict[str, Any]:
+        if limit < 1 or limit > 2000:
+            raise ValueError("limit must be between 1 and 2000")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        endpoint = f"{self._layer_zero_url(layer_url)}/query"
+        params: dict[str, Any] = {
+            "where": "1=1",
+            "outFields": "*",
+            "returnGeometry": "true",
+            "f": "json",
+        }
+        if object_ids is not None:
+            if not object_ids:
+                return {"features": []}
+            params["objectIds"] = ",".join(str(value) for value in object_ids)
+        else:
+            params["resultRecordCount"] = limit
+            params["resultOffset"] = offset
+        payload = self._get_json_url(endpoint, params)
         if not isinstance(payload, dict) or not isinstance(payload.get("features"), list):
             raise ArcGisPhotoMapError("ArcGIS feature query did not return a features array")
         return payload
+
+    def iter_feature_pages(
+        self,
+        layer_url: str,
+        *,
+        page_size: int = 250,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield complete feature pages, preferring stable ID chunks.
+
+        `returnIdsOnly` is not subject to the normal feature transfer limit on
+        ArcGIS services, so chunking the returned IDs prevents silent omission
+        when the photo layer grows beyond the service's page size.
+        """
+        if page_size < 1 or page_size > 2000:
+            raise ValueError("page_size must be between 1 and 2000")
+        try:
+            object_ids = self.query_object_ids(layer_url)
+        except ArcGisPhotoMapError:
+            object_ids = []
+
+        if object_ids:
+            for start in range(0, len(object_ids), page_size):
+                chunk = object_ids[start : start + page_size]
+                yield self.query_features(layer_url, limit=len(chunk), object_ids=chunk)
+            return
+
+        # Fallback for older/nonstandard services that do not support IDs-only.
+        offset = 0
+        while True:
+            page = self.query_features(layer_url, limit=page_size, offset=offset)
+            yield page
+            features = page.get("features") or []
+            if len(features) < page_size and not page.get("exceededTransferLimit"):
+                return
+            offset += len(features)
+            if not features:
+                return
 
     @staticmethod
     def _mercator_to_wgs84(x: float, y: float) -> tuple[float, float]:
@@ -295,26 +374,31 @@ class ArcGisPhotoMapAdapter:
         if not layers:
             raise ArcGisPhotoMapError("no public FeatureServer layer could be resolved from the ArcGIS app")
         records: list[SourceItem] = []
+        seen_ids: set[str] = set()
         for layer in layers:
             if len(records) >= limit:
                 break
-            # Query a little beyond the remaining target because mixed context
-            # layers can contain non-photo polygon features that we discard.
-            query_limit = min(2000, max(limit - len(records), 50))
             try:
-                payload = self.query_features(str(layer["url"]), limit=query_limit)
+                pages = self.iter_feature_pages(str(layer["url"]), page_size=min(500, max(50, limit)))
+                for payload in pages:
+                    spatial_reference = payload.get("spatialReference")
+                    for feature in payload["features"]:
+                        if len(records) >= limit:
+                            break
+                        if not isinstance(feature, dict) or not self._is_point_geometry(feature.get("geometry")):
+                            continue
+                        try:
+                            record = self.normalize_feature(feature, layer=layer, spatial_reference=spatial_reference)
+                        except ArcGisPhotoMapError:
+                            continue
+                        if record.id in seen_ids:
+                            continue
+                        seen_ids.add(record.id)
+                        records.append(record)
+                    if len(records) >= limit:
+                        break
             except ArcGisPhotoMapError:
                 continue
-            spatial_reference = payload.get("spatialReference")
-            for feature in payload["features"]:
-                if len(records) >= limit:
-                    break
-                if not isinstance(feature, dict) or not self._is_point_geometry(feature.get("geometry")):
-                    continue
-                try:
-                    records.append(self.normalize_feature(feature, layer=layer, spatial_reference=spatial_reference))
-                except ArcGisPhotoMapError:
-                    continue
         if not records:
             raise ArcGisPhotoMapError("public FeatureServer layers resolved but no point photo features were returned")
         return records
