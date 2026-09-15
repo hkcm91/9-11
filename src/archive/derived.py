@@ -4,6 +4,7 @@ import re
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 from archive.adapters.nist_organized import temporal_claim_from_nist_row
 from archive.heuristics import document_coverage_claim_from_title
@@ -23,6 +24,30 @@ _VOICES_FILENAME_RE = re.compile(
     r"^V\d+\s+(?P<name>.+?)(?:\.(?:mov|mp4|m4v|avi)){1,2}$",
     re.IGNORECASE,
 )
+_ARCHDISK_TIME_RE = re.compile(r"^(?P<h>\d{1,2}):(?P<m>\d{2})(?::(?P<s>\d{2}))?$")
+_FACING_RE = re.compile(
+    r"\bfacing\s+(?P<direction>north|south|east|west|northeast|northwest|southeast|southwest|n|s|e|w|ne|nw|se|sw)\b",
+    re.IGNORECASE,
+)
+_NY_TZ = ZoneInfo("America/New_York")
+_HEADING = {
+    "north": 0.0,
+    "n": 0.0,
+    "northeast": 45.0,
+    "ne": 45.0,
+    "east": 90.0,
+    "e": 90.0,
+    "southeast": 135.0,
+    "se": 135.0,
+    "south": 180.0,
+    "s": 180.0,
+    "southwest": 225.0,
+    "sw": 225.0,
+    "west": 270.0,
+    "w": 270.0,
+    "northwest": 315.0,
+    "nw": 315.0,
+}
 
 
 def _parse_ia_utc_datetime(value: Any) -> datetime | None:
@@ -74,6 +99,71 @@ def _internet_archive_recording_claim(item: SourceItem) -> TemporalClaim | None:
     )
 
 
+def _archdisk_capture_time_claim(item: SourceItem) -> TemporalClaim | None:
+    if item.source_id != "archdisk-911-photo-map":
+        return None
+
+    raw_time = item.metadata_raw.get("time_taken_raw") or item.date_raw
+    if isinstance(raw_time, str):
+        match = _ARCHDISK_TIME_RE.match(raw_time.strip())
+        if match:
+            hour = int(match.group("h"))
+            minute = int(match.group("m"))
+            second = int(match.group("s") or 0)
+            if hour < 24 and minute < 60 and second < 60:
+                captured = datetime(2001, 9, 11, hour, minute, second, tzinfo=_NY_TZ)
+                return TemporalClaim(
+                    subject_id=item.id,
+                    time_kind=TimeKind.CAPTURE,
+                    start_time=captured,
+                    end_time=captured,
+                    confidence=0.85,
+                    method="archdisk_time_taken",
+                    created_by_agent="deterministic-archdisk-importer",
+                    evidence=[
+                        EvidenceRef(
+                            source_item_id=item.id,
+                            relationship="community_map_capture_time",
+                            note=(
+                                f"Capture time {raw_time.strip()} preserved from archDisk timeTaken metadata; "
+                                "date anchored to the map's September 11, 2001 event scope."
+                            ),
+                            weight=0.85,
+                        )
+                    ],
+                )
+
+    folder = item.metadata_raw.get("folder_path")
+    if isinstance(folder, str) and folder.strip().casefold() == "before 8:46am":
+        return TemporalClaim(
+            subject_id=item.id,
+            time_kind=TimeKind.CAPTURE,
+            start_time=None,
+            end_time=datetime(2001, 9, 11, 8, 46, 0, tzinfo=_NY_TZ),
+            confidence=0.70,
+            method="archdisk_folder_time_bucket",
+            created_by_agent="deterministic-archdisk-importer",
+            evidence=[
+                EvidenceRef(
+                    source_item_id=item.id,
+                    relationship="community_map_time_bucket",
+                    note="archDisk folder classifies this photograph as captured before 8:46 AM on September 11, 2001.",
+                    weight=0.70,
+                )
+            ],
+        )
+    return None
+
+
+def _heading_from_text(value: Any) -> float | None:
+    if not isinstance(value, str):
+        return None
+    match = _FACING_RE.search(value)
+    if not match:
+        return None
+    return _HEADING.get(match.group("direction").casefold())
+
+
 def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]:
     """Run deterministic, evidence-preserving temporal derivations."""
     claims: list[TemporalClaim] = []
@@ -90,6 +180,10 @@ def derive_temporal_claims(records: Iterable[SourceItem]) -> list[TemporalClaim]
         ia_claim = _internet_archive_recording_claim(item)
         if ia_claim is not None:
             claims.append(ia_claim)
+
+        archdisk_claim = _archdisk_capture_time_claim(item)
+        if archdisk_claim is not None:
+            claims.append(archdisk_claim)
     return claims
 
 
@@ -105,6 +199,13 @@ def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
             continue
         if not (-90 <= float(latitude) <= 90 and -180 <= float(longitude) <= 180):
             continue
+
+        heading = _heading_from_text(item.metadata_raw.get("mapped_address") or item.location_raw)
+        note = "Point geometry preserved from the public archDisk ArcGIS feature layer."
+        if heading is not None:
+            note += f" Facing direction in source address converted to heading {heading:.0f}°."
+        note += " Community-curated position should be reviewed before verification."
+
         claims.append(
             SpatialClaim(
                 subject_id=item.id,
@@ -112,6 +213,8 @@ def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
                 longitude=float(longitude),
                 location_kind=LocationKind.CAPTURE,
                 accuracy_radius_m=None,
+                heading_deg=heading,
+                heading_uncertainty_deg=22.5 if heading is not None else None,
                 confidence=0.80,
                 method="archdisk_arcgis_point",
                 created_by_agent="deterministic-arcgis-importer",
@@ -119,10 +222,7 @@ def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
                     EvidenceRef(
                         source_item_id=item.id,
                         relationship="geospatial_source_point",
-                        note=(
-                            "Point geometry preserved from the public archDisk ArcGIS feature layer. "
-                            "Community-curated position should be reviewed before verification."
-                        ),
+                        note=note,
                         weight=0.8,
                     )
                 ],
@@ -185,6 +285,30 @@ def derive_entity_claims(records: Iterable[SourceItem]) -> list[EntityReferenceC
                                 relationship="broadcaster_metadata",
                                 note="Broadcaster preserved from Internet Archive contributor metadata.",
                                 weight=0.99,
+                            )
+                        ],
+                    )
+                )
+
+        if item.source_id == "archdisk-911-photo-map" and item.creator_raw:
+            name = " ".join(item.creator_raw.split())
+            if name:
+                claims.append(
+                    EntityReferenceClaim(
+                        subject_id=item.id,
+                        entity_kind=EntityKind.PERSON,
+                        role=EntityRole.PHOTOGRAPHER,
+                        name_raw=name,
+                        normalized_name=name,
+                        confidence=0.90,
+                        method="archdisk_name_field",
+                        created_by_agent="deterministic-entity-parser",
+                        evidence=[
+                            EvidenceRef(
+                                source_item_id=item.id,
+                                relationship="community_map_photographer",
+                                note="Photographer name preserved from the archDisk photo-map Name field.",
+                                weight=0.90,
                             )
                         ],
                     )
