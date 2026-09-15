@@ -4,23 +4,24 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import asdict
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from archive.corpus import load_jsonl
 from archive.models import SourceItem
+from archive.proposals import ProposalEnvelope, load_proposal_jsonl
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+_ALLOWED_REVIEW_STATUSES = {"reviewed", "verified", "rejected", "disputed"}
 
 
 class ArchiveStore:
     """Small provenance-first SQLite store for Phase 0/1 research outputs.
 
-    Raw source payloads and normalization outputs are both version-significant:
-    the same upstream JSON/XML may normalize differently after an adapter fix.
-    `source_records` is a convenience read model pointing at the richest
-    normalized observation seen for a stable item; observations stay preserved.
+    Raw source payloads, normalization outputs, machine proposals, and reviewer
+    actions are all preserved separately. `source_records` is only a convenient
+    read model; it never erases the observations from which it was derived.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -130,6 +131,34 @@ class ArchiveStore:
                 claim_json TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS agent_proposals (
+                proposal_id TEXT PRIMARY KEY,
+                task_id TEXT,
+                agent_name TEXT NOT NULL,
+                agent_version TEXT NOT NULL,
+                subject_id TEXT NOT NULL,
+                proposal_type TEXT NOT NULL,
+                proposal_value_json TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                evidence_json TEXT NOT NULL,
+                source_ids_json TEXT NOT NULL,
+                notes TEXT,
+                review_status TEXT NOT NULL DEFAULT 'proposed',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                proposal_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS proposal_reviews (
+                review_id TEXT PRIMARY KEY,
+                proposal_id TEXT NOT NULL REFERENCES agent_proposals(proposal_id) ON DELETE CASCADE,
+                reviewer TEXT NOT NULL,
+                previous_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_source_records_source ON source_records(source_id);
             CREATE INDEX IF NOT EXISTS idx_source_records_date ON source_records(date_raw);
             CREATE INDEX IF NOT EXISTS idx_source_records_creator ON source_records(creator_raw);
@@ -140,6 +169,10 @@ class ArchiveStore:
             CREATE INDEX IF NOT EXISTS idx_spatial_latlon ON spatial_claims(latitude, longitude);
             CREATE INDEX IF NOT EXISTS idx_entity_subject ON entity_claims(subject_id);
             CREATE INDEX IF NOT EXISTS idx_entity_name ON entity_claims(normalized_name);
+            CREATE INDEX IF NOT EXISTS idx_proposals_subject ON agent_proposals(subject_id);
+            CREATE INDEX IF NOT EXISTS idx_proposals_task ON agent_proposals(task_id);
+            CREATE INDEX IF NOT EXISTS idx_proposals_status ON agent_proposals(review_status);
+            CREATE INDEX IF NOT EXISTS idx_reviews_proposal ON proposal_reviews(proposal_id);
             """
         )
         self.connection.execute(
@@ -344,10 +377,97 @@ class ArchiveStore:
                 count += 1
         return count
 
+    def put_proposal(self, proposal: ProposalEnvelope) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        payload = proposal.to_dict()
+        self.connection.execute(
+            """
+            INSERT INTO agent_proposals(
+                proposal_id, task_id, agent_name, agent_version, subject_id,
+                proposal_type, proposal_value_json, confidence, evidence_json,
+                source_ids_json, notes, review_status, created_at, updated_at,
+                proposal_json
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(proposal_id) DO UPDATE SET
+                updated_at=excluded.updated_at,
+                proposal_json=excluded.proposal_json
+            """,
+            (
+                proposal.proposal_id, proposal.task_id, proposal.agent_name,
+                proposal.agent_version, proposal.subject_id, proposal.proposal_type,
+                self._json(proposal.proposal_value), proposal.confidence,
+                self._json(proposal.evidence), self._json(proposal.source_ids),
+                proposal.notes, proposal.review_status, proposal.created_at.isoformat(),
+                now, self._json(payload),
+            ),
+        )
+
+    def import_proposal_jsonl(self, path: Path) -> int:
+        proposals = load_proposal_jsonl(path)
+        with self.connection:
+            for proposal in proposals:
+                self.put_proposal(proposal)
+        return len(proposals)
+
+    def review_proposal(
+        self,
+        proposal_id: str,
+        *,
+        reviewer: str,
+        new_status: str,
+        note: str | None = None,
+    ) -> str:
+        reviewer = reviewer.strip()
+        new_status = new_status.strip().lower()
+        if not reviewer:
+            raise ValueError("reviewer is required")
+        if new_status not in _ALLOWED_REVIEW_STATUSES:
+            raise ValueError(f"unsupported review status: {new_status}")
+
+        row = self.connection.execute(
+            "SELECT review_status FROM agent_proposals WHERE proposal_id = ?", (proposal_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(proposal_id)
+        previous = str(row["review_status"])
+        if new_status == "verified" and previous != "reviewed":
+            raise ValueError("a proposal must be reviewed before it can be verified")
+        if previous in {"rejected", "verified"}:
+            raise ValueError(f"proposal is already terminal: {previous}")
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        review_material = self._json(
+            {
+                "proposal_id": proposal_id,
+                "reviewer": reviewer,
+                "previous_status": previous,
+                "new_status": new_status,
+                "note": note,
+                "created_at": created_at,
+            }
+        )
+        review_id = "review:" + hashlib.sha256(review_material.encode("utf-8")).hexdigest()[:24]
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO proposal_reviews(
+                    review_id, proposal_id, reviewer, previous_status,
+                    new_status, note, created_at
+                ) VALUES(?,?,?,?,?,?,?)
+                """,
+                (review_id, proposal_id, reviewer, previous, new_status, note, created_at),
+            )
+            self.connection.execute(
+                "UPDATE agent_proposals SET review_status = ?, updated_at = ? WHERE proposal_id = ?",
+                (new_status, created_at, proposal_id),
+            )
+        return review_id
+
     def stats(self) -> dict[str, int]:
         tables = (
             "source_records", "source_observations", "temporal_claims",
-            "spatial_claims", "entity_claims",
+            "spatial_claims", "entity_claims", "agent_proposals",
+            "proposal_reviews",
         )
         return {
             table: int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
