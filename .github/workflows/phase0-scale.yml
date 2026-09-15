@@ -1,6 +1,8 @@
 name: phase0-scale
 
 on:
+  push:
+    branches: [archive-skeleton]
   workflow_dispatch:
     inputs:
       internet_archive_limit:
@@ -31,7 +33,7 @@ jobs:
         run: |
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.25 --output artifacts/raw/nist-repository.jsonl
-          archive-ingest sample-photo-map --limit "${{ inputs.photo_map_limit }}" --delay 0.2 --output artifacts/raw/archdisk-photo-map.jsonl
+          archive-ingest sample-photo-map --limit "${{ inputs.photo_map_limit || '150' }}" --delay 0.2 --output artifacts/raw/archdisk-photo-map.jsonl
 
       - name: Collect reconstruction-oriented September 11 Digital Archive collections
         run: |
@@ -41,7 +43,7 @@ jobs:
 
       - name: Collect Internet Archive broadcast metadata
         run: |
-          archive-ingest sample-internet-archive --limit "${{ inputs.internet_archive_limit }}" --delay 0.25 --output artifacts/raw/internet-archive.jsonl
+          archive-ingest sample-internet-archive --limit "${{ inputs.internet_archive_limit || '350' }}" --delay 0.25 --output artifacts/raw/internet-archive.jsonl
           archive-ingest sample-internet-archive --details --limit 50 --delay 0.25 --output artifacts/raw/internet-archive-details.jsonl
 
       - name: Build normalized research outputs
