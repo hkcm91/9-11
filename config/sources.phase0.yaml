@@ -31,6 +31,23 @@ sources:
     notes: Browse interface currently exposes 70k+ item records and machine-readable output formats including JSON, CSV, RDF, and Omeka XML.
     enabled: true
 
+  - id: archdisk-911-photo-map
+    name: archDisk 9/11 Photo Map
+    type: community_geospatial_archive
+    homepage_url: https://archdisk.com/photomap
+    app_url: https://archdisk.maps.arcgis.com/apps/instant/attachmentviewer/index.html?appid=1b7d4d22866b445881b181614e25d4d4
+    access_method: public_arcgis_app_and_feature_layers
+    public_access: true
+    rights_status: metadata_only_until_item_review
+    rights_notes: Geographic point metadata may be indexed with attribution; public map display does not imply permission to mirror attached photographs. Preserve original photographer/source rights separately.
+    metadata_quality: community_curated
+    ingest_mode: geospatial_metadata_first
+    media_types: [photo, geospatial_point]
+    priority: critical
+    estimated_item_count: null
+    notes: Community-maintained map reports thousands of geolocated 9/11 photographs. Use as spatial seed evidence, not an unquestioned authority; preserve point/source provenance and later assign uncertainty where appropriate.
+    enabled: true
+
   - id: loc-september11-digital-archive-record
     name: Library of Congress - September 11 Digital Archive record
     type: national_library
