@@ -63,8 +63,11 @@ class InternetArchiveAdapter:
             raise ValueError("rows must be between 1 and 1000")
         payload = self._get_json("/advancedsearch.php", {
             "q": f"collection:{self.collection}",
-            "fl[]": ["identifier", "title", "creator", "date", "description", "rights",
-                     "licenseurl", "mediatype", "collection", "publicdate"],
+            "fl[]": [
+                "identifier", "title", "creator", "contributor", "date", "description", "rights",
+                "licenseurl", "mediatype", "collection", "publicdate", "start_time", "stop_time",
+                "start_localtime", "utc_offset", "runtime",
+            ],
             "rows": rows, "page": page, "output": "json",
         })
         response = payload.get("response") if isinstance(payload, dict) else None
@@ -174,6 +177,7 @@ class InternetArchiveAdapter:
         if not identifier:
             raise InternetArchiveAdapterError("Internet Archive item is missing identifier")
         rights = self._string(item.get("rights")) or self._string(item.get("licenseurl"))
+        creator = self._string(item.get("creator")) or self._string(item.get("contributor"))
         return SourceItem(
             id=f"{SOURCE_ID}:{identifier}",
             source_id=SOURCE_ID,
@@ -181,7 +185,7 @@ class InternetArchiveAdapter:
             source_url=f"{self.base_url}/details/{identifier}",
             title_raw=self._string(item.get("title")),
             description_raw=self._string(item.get("description")),
-            creator_raw=self._string(item.get("creator")),
+            creator_raw=creator,
             date_raw=self._string(item.get("date")),
             archive_added_raw=self._string(item.get("publicdate")),
             rights_raw=rights,
