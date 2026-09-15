@@ -23,6 +23,26 @@ class MediaType(StrEnum):
     OTHER = "other"
 
 
+class TimeKind(StrEnum):
+    EVENT = "event_time"
+    CAPTURE = "capture_time"
+    RECORDING = "recording_time"
+    DOCUMENT_COVERAGE = "document_coverage"
+    INTERVIEW = "interview_time"
+    PUBLICATION = "publication_time"
+    ARCHIVE_INGEST = "archive_ingest_time"
+    UNKNOWN = "unknown"
+
+
+class LocationKind(StrEnum):
+    EVENT = "event_location"
+    CAPTURE = "capture_location"
+    TESTIMONY = "testimony_location"
+    DOCUMENT_COVERAGE = "document_coverage_location"
+    SUBJECT = "subject_location"
+    UNKNOWN = "unknown"
+
+
 @dataclass(slots=True)
 class SourceItem:
     id: str
@@ -53,6 +73,7 @@ class EvidenceRef:
 @dataclass(slots=True)
 class TemporalClaim:
     subject_id: str
+    time_kind: TimeKind = TimeKind.UNKNOWN
     start_time: datetime | None = None
     end_time: datetime | None = None
     uncertainty_before_ms: int | None = None
@@ -69,6 +90,7 @@ class SpatialClaim:
     subject_id: str
     latitude: float
     longitude: float
+    location_kind: LocationKind = LocationKind.UNKNOWN
     accuracy_radius_m: float | None = None
     heading_deg: float | None = None
     heading_uncertainty_deg: float | None = None
