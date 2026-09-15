@@ -59,6 +59,9 @@ jobs:
       - name: Derive deterministic temporal claims
         run: |
           archive-ingest derive-temporal-claims artifacts/raw/*.jsonl --output artifacts/reports/temporal-claims.jsonl
+      - name: Derive provenance-backed spatial claims
+        run: |
+          archive-ingest derive-spatial-claims artifacts/raw/*.jsonl --output artifacts/reports/spatial-claims.jsonl
       - name: Rank enrichment work
         run: |
           archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
@@ -76,7 +79,8 @@ jobs:
           duplicate_count = sum(1 for line in duplicate_path.read_text(encoding="utf-8").splitlines() if line.strip())
           priorities = [json.loads(line) for line in Path("artifacts/reports/enrichment-priority.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           tasks = [json.loads(line) for line in Path("artifacts/reports/work-queue.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-          claims = [json.loads(line) for line in Path("artifacts/reports/temporal-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          temporal_claims = [json.loads(line) for line in Path("artifacts/reports/temporal-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+          spatial_claims = [json.loads(line) for line in Path("artifacts/reports/spatial-claims.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
           photo_probe = json.loads(Path("artifacts/reports/photo-map-probe.json").read_text(encoding="utf-8"))
           raw_counts = {}
           for path in sorted(Path("artifacts/raw").glob("*.jsonl")):
@@ -88,8 +92,10 @@ jobs:
               "populated_percent": profile.get("populated_percent"),
               "duplicate_candidates": duplicate_count,
               "photo_map_probe": photo_probe,
-              "deterministic_temporal_claims": len(claims),
-              "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in claims)),
+              "deterministic_temporal_claims": len(temporal_claims),
+              "temporal_claim_kinds": dict(Counter(claim["time_kind"] for claim in temporal_claims)),
+              "provenance_backed_spatial_claims": len(spatial_claims),
+              "spatial_claim_kinds": dict(Counter(claim["location_kind"] for claim in spatial_claims)),
               "work_queue_task_counts": dict(Counter(task["task_type"] for task in tasks)),
               "work_queue_role_counts": dict(Counter(task["record_role"] for task in tasks)),
               "highest_enrichment_priority": priorities[:10],
