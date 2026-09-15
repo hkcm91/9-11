@@ -19,11 +19,8 @@ from archive.models import (
     TemporalClaim,
     TimeKind,
 )
+from archive.voices import parse_voices_interviewee_label
 
-_VOICES_FILENAME_RE = re.compile(
-    r"^V\d+\s+(?P<name>.+?)(?:\.(?:mov|mp4|m4v|avi)){1,2}$",
-    re.IGNORECASE,
-)
 _ARCHDISK_TIME_RE = re.compile(r"^(?P<h>\d{1,2}):(?P<m>\d{2})(?::(?P<s>\d{2}))?$")
 _FACING_RE = re.compile(
     r"\bfacing\s+(?P<direction>north|south|east|west|northeast|northwest|southeast|southwest|n|s|e|w|ne|nw|se|sw)\b",
@@ -236,32 +233,37 @@ def derive_entity_claims(records: Iterable[SourceItem]) -> list[EntityReferenceC
     claims: list[EntityReferenceClaim] = []
     for item in records:
         collection_id = item.metadata_raw.get("collection_id")
+        try:
+            collection_id = int(collection_id) if collection_id is not None else None
+        except (TypeError, ValueError):
+            collection_id = None
+
         if item.source_id == "september-11-digital-archive" and collection_id == 267:
-            title = (item.title_raw or "").strip()
-            match = _VOICES_FILENAME_RE.match(title)
-            if match:
-                name = " ".join(match.group("name").split())
-                if name:
-                    claims.append(
-                        EntityReferenceClaim(
-                            subject_id=item.id,
-                            entity_kind=EntityKind.PERSON,
-                            role=EntityRole.INTERVIEWEE,
-                            name_raw=name,
-                            normalized_name=name,
-                            confidence=0.95,
-                            method="voices_911_filename_convention",
-                            created_by_agent="deterministic-entity-parser",
-                            evidence=[
-                                EvidenceRef(
-                                    source_item_id=item.id,
-                                    relationship="interviewee_filename",
-                                    note=f"Interviewee name parsed from Voices of 9.11 source filename: {title}",
-                                    weight=0.95,
-                                )
-                            ],
-                        )
+            parsed = parse_voices_interviewee_label(item.title_raw)
+            if parsed is not None:
+                claims.append(
+                    EntityReferenceClaim(
+                        subject_id=item.id,
+                        entity_kind=EntityKind.PERSON,
+                        role=EntityRole.INTERVIEWEE,
+                        name_raw=parsed.name_raw,
+                        normalized_name=parsed.normalized_name,
+                        confidence=parsed.confidence,
+                        method=parsed.method,
+                        created_by_agent="deterministic-entity-parser",
+                        evidence=[
+                            EvidenceRef(
+                                source_item_id=item.id,
+                                relationship="interviewee_filename",
+                                note=(
+                                    "Interviewee source label parsed conservatively from Voices of 9.11 filename: "
+                                    f"{(item.title_raw or '').strip()}"
+                                ),
+                                weight=parsed.confidence,
+                            )
+                        ],
                     )
+                )
 
         if item.source_id == "internet-archive-understanding-911":
             contributor = item.metadata_raw.get("contributor")
