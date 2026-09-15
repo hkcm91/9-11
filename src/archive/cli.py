@@ -5,7 +5,13 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from archive.adapters import ArcGisPhotoMapAdapter, InternetArchiveAdapter, NistWtcRepositoryAdapter, September11DigitalArchiveAdapter
+from archive.adapters import (
+    ArcGisPhotoMapAdapter,
+    InternetArchiveAdapter,
+    NistOrganizedMediaAdapter,
+    NistWtcRepositoryAdapter,
+    September11DigitalArchiveAdapter,
+)
 from archive.corpus import load_jsonl, reconcile_source_snapshots
 from archive.dedupe import find_candidates
 from archive.derived import (
@@ -46,6 +52,21 @@ def build_parser() -> argparse.ArgumentParser:
     sample_nist = subparsers.add_parser("sample-nist", help="Inventory public NIST WTC repository entry points")
     sample_nist.add_argument("--output", type=Path, required=True)
     sample_nist.add_argument("--delay", type=float, default=0.5)
+
+    sample_nist_organized = subparsers.add_parser(
+        "sample-nist-organized",
+        help="Sample asset metadata from NIST's public organized photo/video hierarchy",
+    )
+    _add_output_args(sample_nist_organized, default_delay=0.25)
+    sample_nist_organized.add_argument("--folder-id", default=None)
+
+    import_nist_organized = subparsers.add_parser(
+        "import-nist-organized",
+        help="Import a NIST organized-media CSV, JSON, JSONL, or NDJSON manifest",
+    )
+    import_nist_organized.add_argument("input", type=Path)
+    import_nist_organized.add_argument("--output", type=Path, required=True)
+    import_nist_organized.add_argument("--limit", type=int, default=None)
 
     sample_photo_map = subparsers.add_parser("sample-photo-map", help="Sample geolocated metadata from the public archDisk ArcGIS map")
     _add_output_args(sample_photo_map, default_delay=0.25)
@@ -139,6 +160,23 @@ def main(argv: list[str] | None = None) -> int:
         records = adapter.sample()
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} NIST repository records to {args.output}")
+        return 0
+
+    if args.command == "sample-nist-organized":
+        kwargs = {"request_delay_s": args.delay}
+        if args.folder_id:
+            kwargs["folder_id"] = args.folder_id
+        adapter = NistOrganizedMediaAdapter(**kwargs)
+        records = adapter.sample(limit=args.limit)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} NIST organized-media records to {args.output}")
+        return 0
+
+    if args.command == "import-nist-organized":
+        adapter = NistOrganizedMediaAdapter(request_delay_s=0)
+        records = adapter.import_manifest(args.input, limit=args.limit)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} NIST organized-media records to {args.output}")
         return 0
 
     if args.command == "sample-photo-map":

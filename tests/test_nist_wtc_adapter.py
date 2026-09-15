@@ -21,6 +21,18 @@ def test_extract_repository_links_prefers_real_links_and_adds_fallbacks() -> Non
     assert "Computer Simulations" in labels
 
 
+def test_extracts_nist_google_drive_image_links_by_alt_text() -> None:
+    adapter = NistWtcRepositoryAdapter(request_delay_s=0)
+    html = '''
+      <a href="https://googledrive.nist.gov/folders/organized"><img alt="WTC - Organized Photos for Repository"></a>
+    '''
+    rows = adapter.extract_repository_links(html)
+    organized = next(row for row in rows if row["label"] == "Organized Photos and Video Clips")
+    assert organized["url"] == "https://googledrive.nist.gov/folders/organized"
+    assert organized["source_label"] == "WTC - Organized Photos for Repository"
+    assert "fallback" not in organized
+
+
 def test_normalize_marks_repository_entry() -> None:
     adapter = NistWtcRepositoryAdapter(request_delay_s=0)
     item = adapter.normalize({

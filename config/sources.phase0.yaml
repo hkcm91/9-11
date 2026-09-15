@@ -14,6 +14,23 @@ sources:
     estimated_item_count: null
     enabled: true
 
+  - id: nist-wtc-organized-media
+    name: NIST Organized Photos and Video Clips
+    type: government_visual_media_collection
+    homepage_url: https://www.nist.gov/world-trade-center-investigation/photos-videos-and-simulations
+    archive_url: https://googledrive.nist.gov/folders/17lDS4YslnUaOHv-x2CEhWLVzmceNllk1
+    access_method: public_drive_inventory_and_metadata_manifest
+    public_access: true
+    rights_status: item_specific_review_required
+    rights_notes: Folder visibility is not a redistribution license. Preserve exact item rights fields when present and keep unresolved items in the separate rights-clearance queue.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [photo, video]
+    priority: critical
+    estimated_item_count: 13876
+    notes: NIST reports 6,899 photographs and 6,977 video clips in its visual databases. The public Drive hierarchy exposes stable file IDs, filenames, media families, and source-group folders; richer database exports can be imported from CSV, JSON, JSONL, or NDJSON without dropping unknown fields.
+    enabled: true
+
   - id: september11-digital-archive
     name: September 11 Digital Archive
     type: digital_archive

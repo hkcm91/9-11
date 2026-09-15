@@ -36,6 +36,10 @@ The current `NistWtcRepositoryAdapter` implements this layer.
 
 Highest priority is the Organized Photos and Video Clips collection because NIST states that tags and attributes were assigned to this subset.
 
+The authoritative landing page currently links this collection to NIST-owned public Google Drive folder `17lDS4YslnUaOHv-x2CEhWLVzmceNllk1`. Its public embedded-folder representation is the strongest no-key machine-readable path found: it exposes stable file/folder IDs, filenames, media-family folders, source/creator grouping, item URLs, and listing modification dates without downloading the media. The repository currently presents `Photos`, `VideoClips`, and `ReadMe.txt` at the root.
+
+The public Drive hierarchy does **not** expose the original searchable database's timing, camera location, view direction, tags, or per-item rights fields as a downloadable table. The importer therefore never invents those values. `sample-nist-organized` inventories the public hierarchy; `import-nist-organized` accepts a CSV, JSON, JSONL, or NDJSON metadata export when one is obtained and retains every source column verbatim.
+
 Fields we should seek and preserve verbatim include:
 
 - asset reference / record name;
@@ -80,4 +84,6 @@ Public availability is not a redistribution license. NIST states that repository
 
 ## Next engineering target
 
-Once stable structured metadata endpoints or export files for Organized Photos and Video Clips are identified, implement a second NIST adapter that emits one `SourceItem` per photo/video record. The current landing-page adapter should remain as the authoritative repository-discovery layer.
+The `NistOrganizedMediaAdapter` now emits one `SourceItem` per public Drive asset and can normalize richer metadata-export rows. It maps explicit NIST timing into proposed capture/recording claims, numeric camera coordinates and view direction into proposed spatial claims, and explicit photographer/videographer/source values into proposed entity-reference claims. Text-only locations and all unknown fields remain raw source metadata. Per-item rights text is preserved exactly; absent rights remain unresolved so the separate rights-clearance workflow still runs.
+
+The landing-page adapter remains the authoritative repository-discovery layer. Because Google's embedded-folder HTML is a public view rather than a versioned API contract, parser failures are explicit and covered by fixtures; CI samples the live hierarchy so layout/access regressions surface early.

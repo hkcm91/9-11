@@ -11,6 +11,10 @@ on:
         description: archDisk point-photo records
         required: false
         default: "150"
+      nist_organized_limit:
+        description: NIST organized photo/video asset records
+        required: false
+        default: "250"
 
 concurrency:
   group: phase0-scale
@@ -31,6 +35,7 @@ jobs:
         run: |
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.25 --output artifacts/raw/nist-repository.jsonl
+          archive-ingest sample-nist-organized --limit "${{ inputs.nist_organized_limit || '250' }}" --delay 0.2 --output artifacts/raw/nist-organized-media.jsonl
           archive-ingest sample-photo-map --limit "${{ inputs.photo_map_limit || '150' }}" --delay 0.2 --output artifacts/raw/archdisk-photo-map.jsonl
 
       - name: Collect reconstruction-oriented September 11 Digital Archive collections

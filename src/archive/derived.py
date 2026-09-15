@@ -6,7 +6,11 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
-from archive.adapters.nist_organized import temporal_claim_from_nist_row
+from archive.adapters.nist_organized import (
+    entity_claim_from_nist_row,
+    spatial_claim_from_nist_row,
+    temporal_claim_from_nist_row,
+)
 from archive.heuristics import document_coverage_claim_from_title
 from archive.models import (
     EntityKind,
@@ -188,6 +192,11 @@ def derive_spatial_claims(records: Iterable[SourceItem]) -> list[SpatialClaim]:
     """Create provenance-backed spatial claims from structured source geometry."""
     claims: list[SpatialClaim] = []
     for item in records:
+        if item.source_id == "nist-wtc-organized-media":
+            nist_claim = spatial_claim_from_nist_row(item)
+            if nist_claim is not None:
+                claims.append(nist_claim)
+            continue
         if item.source_id != "archdisk-911-photo-map":
             continue
         latitude = item.metadata_raw.get("resolved_latitude")
@@ -232,6 +241,11 @@ def derive_entity_claims(records: Iterable[SourceItem]) -> list[EntityReferenceC
     """Derive narrow entity references from explicit source naming conventions."""
     claims: list[EntityReferenceClaim] = []
     for item in records:
+        if item.source_id == "nist-wtc-organized-media":
+            nist_claim = entity_claim_from_nist_row(item)
+            if nist_claim is not None:
+                claims.append(nist_claim)
+
         collection_id = item.metadata_raw.get("collection_id")
         try:
             collection_id = int(collection_id) if collection_id is not None else None

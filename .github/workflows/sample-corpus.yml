@@ -26,6 +26,7 @@ jobs:
         run: |
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.2 --output artifacts/raw/nist-repository.jsonl
+          archive-ingest sample-nist-organized --limit 25 --delay 0.2 --output artifacts/raw/nist-organized-media.jsonl
       - name: Inventory archDisk public feature layers
         run: |
           archive-photo-map-info --delay 0.15 --output artifacts/reports/photo-map-inventory.json

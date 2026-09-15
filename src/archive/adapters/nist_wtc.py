@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -24,6 +25,15 @@ TARGET_LABELS = (
     "Fire Tests and Analysis",
 )
 
+_TARGET_LABEL_TOKENS = (
+    ("organizedphotos", "Organized Photos and Video Clips"),
+    ("originalvideo", "Original Video from Tapes"),
+    ("otherphotos", "Other Photos and Videos"),
+    ("imagesofcollectedsteel", "Images of Collected Steel"),
+    ("computersimulations", "Computer Simulations"),
+    ("firetests", "Fire Tests and Analysis"),
+)
+
 
 class NistWtcAdapterError(RuntimeError):
     pass
@@ -37,9 +47,14 @@ class _AnchorParser(HTMLParser):
         self.links: list[tuple[str, str]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() != "a":
+        tag = tag.lower()
+        values = dict(attrs)
+        if tag == "img" and self.current_href is not None and values.get("alt"):
+            self.current_text.append(values["alt"] or "")
             return
-        self.current_href = dict(attrs).get("href")
+        if tag != "a":
+            return
+        self.current_href = values.get("href")
         self.current_text = []
 
     def handle_data(self, data: str) -> None:
@@ -102,32 +117,47 @@ class NistWtcRepositoryAdapter:
     def _stable_id(url: str) -> str:
         return hashlib.sha256(url.encode("utf-8")).hexdigest()[:20]
 
+    @staticmethod
+    def _canonical_label(text: str) -> str | None:
+        exact = {label.casefold(): label for label in TARGET_LABELS}.get(text.casefold())
+        if exact:
+            return exact
+        compact = re.sub(r"[^a-z0-9]+", "", text.casefold())
+        for token, label in _TARGET_LABEL_TOKENS:
+            if token in compact:
+                return label
+        return None
+
     def extract_repository_links(self, html: str) -> list[dict[str, Any]]:
         parser = _AnchorParser()
         parser.feed(html)
         seen: set[str] = set()
         results: list[dict[str, Any]] = []
-        lowered_targets = {label.lower(): label for label in TARGET_LABELS}
-
         for text, href in parser.links:
             absolute = urljoin(self.landing_url, href)
             if absolute in seen:
                 continue
             text_norm = " ".join(text.split())
-            label = lowered_targets.get(text_norm.lower())
             host = urlparse(absolute).netloc.lower()
-            is_google_repository = host.endswith("drive.google.com") or host.endswith("docs.google.com")
+            is_google_repository = (
+                host.endswith("drive.google.com")
+                or host.endswith("docs.google.com")
+                or host.endswith("googledrive.nist.gov")
+            )
+            exact_label = {value.casefold(): value for value in TARGET_LABELS}.get(text_norm.casefold())
+            label = exact_label or (self._canonical_label(text_norm) if is_google_repository else None)
             if label is None and not is_google_repository:
                 continue
             seen.add(absolute)
-            results.append(
-                {
-                    "label": label or text_norm or host,
-                    "url": absolute,
-                    "host": host,
-                    "source_page": self.landing_url,
-                }
-            )
+            row = {
+                "label": label or text_norm or host,
+                "url": absolute,
+                "host": host,
+                "source_page": self.landing_url,
+            }
+            if label and text_norm and label != text_norm:
+                row["source_label"] = text_norm
+            results.append(row)
 
         # Some CMS/rendering changes can hide the actual repository hrefs from
         # server-side HTML. Preserve the documented category inventory anyway,
