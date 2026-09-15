@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
-from archive.models import EvidenceRef, SourceItem, TemporalClaim
+from archive.models import EvidenceRef, SourceItem, TemporalClaim, TimeKind
 
 SOURCE_ID = "nist-wtc-organized-media"
 NY_TZ = ZoneInfo("America/New_York")
@@ -62,8 +62,6 @@ def _parse_local_datetime(value: Any) -> datetime | None:
     text = _text(value)
     if not text:
         return None
-
-    # Known/likely export forms from legacy asset databases and spreadsheets.
     formats = (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
@@ -155,6 +153,7 @@ def temporal_claim_from_nist_row(item: SourceItem) -> TemporalClaim | None:
     uncertainty_ms = uncertainty * 1000 if uncertainty is not None else None
     return TemporalClaim(
         subject_id=item.id,
+        time_kind=TimeKind.CAPTURE,
         start_time=start,
         end_time=end,
         uncertainty_before_ms=uncertainty_ms,
@@ -178,5 +177,6 @@ def serialize_temporal_claim(claim: TemporalClaim) -> dict[str, Any]:
         value["start_time"] = claim.start_time.isoformat()
     if claim.end_time is not None:
         value["end_time"] = claim.end_time.isoformat()
+    value["time_kind"] = claim.time_kind.value
     value["status"] = claim.status.value
     return value
