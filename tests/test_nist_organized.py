@@ -153,6 +153,28 @@ def test_recursive_inventory_preserves_drive_ids_paths_and_source_groups() -> No
     assert item.metadata_raw["rights_context"].startswith("NIST states")
 
 
+def test_combined_sample_splits_limit_between_photos_and_videos() -> None:
+    adapter = NistOrganizedMediaAdapter(folder_id="root", request_delay_s=0)
+    calls = []
+
+    def fake_inventory(*, limit, media_type):
+        calls.append((limit, media_type))
+        extension = "jpg" if media_type == "photo" else "avi"
+        return [
+            {
+                "Record Name": f"{media_type}-{index}.{extension}",
+                "Drive File ID": f"{media_type}-{index}",
+                "Media Type": media_type,
+            }
+            for index in range(limit)
+        ]
+
+    adapter.inventory_rows = fake_inventory  # type: ignore[method-assign]
+    records = adapter.sample(limit=5)
+    assert calls == [(3, "photo"), (2, "video")]
+    assert [record.media_type_raw for record in records] == ["photo"] * 3 + ["video"] * 2
+
+
 def test_manifest_loaders_preserve_unknown_columns(tmp_path: Path) -> None:
     csv_path = tmp_path / "nist.csv"
     csv_path.write_text("Record Name,Unmapped Field\nphoto.jpg,verbatim\n", encoding="utf-8")

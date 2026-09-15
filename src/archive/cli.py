@@ -59,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_output_args(sample_nist_organized, default_delay=0.25)
     sample_nist_organized.add_argument("--folder-id", default=None)
+    sample_nist_organized.add_argument(
+        "--media-type",
+        choices=("both", "photo", "video"),
+        default="both",
+        help="Balance the limit across both media families, or select one family",
+    )
 
     import_nist_organized = subparsers.add_parser(
         "import-nist-organized",
@@ -167,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.folder_id:
             kwargs["folder_id"] = args.folder_id
         adapter = NistOrganizedMediaAdapter(**kwargs)
-        records = adapter.sample(limit=args.limit)
+        media_type = None if args.media_type == "both" else args.media_type
+        records = adapter.sample(limit=args.limit, media_type=media_type)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} NIST organized-media records to {args.output}")
         return 0

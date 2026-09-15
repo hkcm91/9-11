@@ -502,9 +502,17 @@ class NistOrganizedMediaAdapter:
         parts = urlparse(url).path.rstrip("/").split("/")
         return parts[-1] if "folders" in parts else None
 
-    def inventory_rows(self, *, limit: int | None = 50) -> list[dict[str, Any]]:
+    def inventory_rows(
+        self,
+        *,
+        limit: int | None = 50,
+        media_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         if limit is not None and limit < 1:
             return []
+        if media_type not in {None, "photo", "video"}:
+            raise ValueError("media_type must be photo, video, or None")
+        selected_root = {"photo": "Photos", "video": "VideoClips"}.get(media_type)
         queue: deque[tuple[str, tuple[str, ...]]] = deque([(self.folder_id, ())])
         visited: set[str] = set()
         assets: list[dict[str, Any]] = []
@@ -524,6 +532,8 @@ class NistOrganizedMediaAdapter:
                     continue
                 path = (*parent_path, name)
                 if entry.get("is_folder"):
+                    if not parent_path and selected_root and name != selected_root:
+                        continue
                     child_id = self._folder_id(entry)
                     if child_id:
                         queue.append((child_id, path))
@@ -553,8 +563,15 @@ class NistOrganizedMediaAdapter:
             )
         return assets
 
-    def sample(self, *, limit: int = 50) -> list[SourceItem]:
-        return [normalize_nist_organized_row(row) for row in self.inventory_rows(limit=limit)]
+    def sample(self, *, limit: int = 50, media_type: str | None = None) -> list[SourceItem]:
+        if media_type is None and limit >= 2:
+            photo_limit = (limit + 1) // 2
+            video_limit = limit // 2
+            rows = self.inventory_rows(limit=photo_limit, media_type="photo")
+            rows.extend(self.inventory_rows(limit=video_limit, media_type="video"))
+        else:
+            rows = self.inventory_rows(limit=limit, media_type=media_type)
+        return [normalize_nist_organized_row(row) for row in rows]
 
     def import_manifest(self, path: Path | str, *, limit: int | None = None) -> list[SourceItem]:
         rows = load_nist_organized_rows(path)

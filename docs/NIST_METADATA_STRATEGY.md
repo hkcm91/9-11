@@ -38,7 +38,7 @@ Highest priority is the Organized Photos and Video Clips collection because NIST
 
 The authoritative landing page currently links this collection to NIST-owned public Google Drive folder `17lDS4YslnUaOHv-x2CEhWLVzmceNllk1`. Its public embedded-folder representation is the strongest no-key machine-readable path found: it exposes stable file/folder IDs, filenames, media-family folders, source/creator grouping, item URLs, and listing modification dates without downloading the media. The repository currently presents `Photos`, `VideoClips`, and `ReadMe.txt` at the root.
 
-The public Drive hierarchy does **not** expose the original searchable database's timing, camera location, view direction, tags, or per-item rights fields as a downloadable table. The importer therefore never invents those values. `sample-nist-organized` inventories the public hierarchy; `import-nist-organized` accepts a CSV, JSON, JSONL, or NDJSON metadata export when one is obtained and retains every source column verbatim.
+The public Drive hierarchy does **not** expose the original searchable database's timing, camera location, view direction, tags, or per-item rights fields as a downloadable table. The importer therefore never invents those values. `sample-nist-organized` inventories the public hierarchy and balances a combined limit across photo and video branches; `--media-type` can select one branch explicitly. `import-nist-organized` accepts a CSV, JSON, JSONL, or NDJSON metadata export when one is obtained and retains every source column verbatim.
 
 Fields we should seek and preserve verbatim include:
 
