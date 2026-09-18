@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "src/archive/**"
+      - "src/historical_engine/**"
+      - "src/evidence_collections/**"
       - "config/sources.phase0.yaml"
       - ".github/workflows/sample-corpus.yml"
   workflow_dispatch:
