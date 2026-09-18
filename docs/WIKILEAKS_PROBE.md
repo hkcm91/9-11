@@ -166,3 +166,47 @@ WikiLeaks should first run as another collection against the same engine. Once
 both September 11 and WikiLeaks use the same core with collection-specific
 configuration, extracting the generic engine into its own repository/package
 will be evidence-driven rather than speculative.
+
+
+## Implemented commands
+
+Bulk-file imports are now wired into the existing CLI:
+
+```bash
+archive-ingest import-wikileaks-plusd cables.csv --limit 100 --output artifacts/raw/plusd.jsonl
+archive-ingest import-wikileaks-war-diaries iraq-war-diary-redacted.csv --limit 100 --output artifacts/raw/war-diaries.jsonl
+```
+
+The adapters also accept JSON, JSONL, and NDJSON for local imports.
+
+After normalization, the records can be passed through the unchanged shared pipeline:
+
+```bash
+archive-ingest profile-jsonl artifacts/raw/*.jsonl --output artifacts/reports/profile.json
+archive-ingest derive-temporal-claims artifacts/raw/*.jsonl --output artifacts/reports/temporal-claims.jsonl
+archive-ingest derive-spatial-claims artifacts/raw/*.jsonl --output artifacts/reports/spatial-claims.jsonl
+archive-ingest derive-entity-claims artifacts/raw/*.jsonl --output artifacts/reports/entity-claims.jsonl
+archive-ingest build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
+archive-ingest build-store --database artifacts/wikileaks.sqlite --records artifacts/raw/*.jsonl
+```
+
+A manual GitHub Actions workflow, `.github/workflows/wikileaks-sample.yml`,
+accepts public HTTPS CSV URLs and imports up to 100 records from each supplied
+dataset before exercising the shared evidence pipeline and uploading the
+resulting SQLite store/reports as an artifact.
+
+## Event-record semantics
+
+War Diaries rows are now treated as generic `event_record` records rather
+than unknown media. Research tasks use `event_time` and `event_location`
+semantics.
+
+If a War Diaries record has an MGRS grid reference but no latitude/longitude,
+the work queue explicitly creates a location-resolution task. The raw MGRS
+value remains preserved; the engine does not invent coordinates.
+
+## Verification status
+
+The original adapter compatibility tests passed on the initial probe commit.
+Later app-authored commits did not automatically retrigger the repository's PR
+workflow, so the newest implementation should be CI-run manually before merge.
