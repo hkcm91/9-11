@@ -1,0 +1,117 @@
+name: wikileaks-sample
+
+on:
+  workflow_dispatch:
+    inputs:
+      plusd_url:
+        description: HTTPS URL to a Cablegate/PlusD CSV, JSON, JSONL, or NDJSON export
+        required: false
+        default: ""
+      war_diaries_url:
+        description: HTTPS URL to an Iraq/Afghan War Diaries CSV, JSON, JSONL, or NDJSON export
+        required: false
+        default: ""
+      sample_limit:
+        description: Maximum records imported from each supplied dataset
+        required: false
+        default: "100"
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+
+      - name: Validate inputs
+        env:
+          PLUSD_URL: ${{ inputs.plusd_url }}
+          WAR_URL: ${{ inputs.war_diaries_url }}
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          urls = [os.environ.get('PLUSD_URL', ''), os.environ.get('WAR_URL', '')]
+          if not any(urls):
+              raise SystemExit('Provide plusd_url and/or war_diaries_url')
+          for url in filter(None, urls):
+              parsed = urlparse(url)
+              if parsed.scheme != 'https' or not parsed.netloc:
+                  raise SystemExit(f'Only public HTTPS dataset URLs are accepted: {url}')
+          PY
+
+      - name: Download supplied public datasets
+        env:
+          PLUSD_URL: ${{ inputs.plusd_url }}
+          WAR_URL: ${{ inputs.war_diaries_url }}
+        run: |
+          mkdir -p artifacts/input artifacts/raw artifacts/reports
+          if [ -n "$PLUSD_URL" ]; then
+            curl --fail --location --retry 3 --retry-delay 2 "$PLUSD_URL" -o artifacts/input/plusd.csv
+          fi
+          if [ -n "$WAR_URL" ]; then
+            curl --fail --location --retry 3 --retry-delay 2 "$WAR_URL" -o artifacts/input/war-diaries.csv
+          fi
+
+      - name: Normalize WikiLeaks samples
+        env:
+          LIMIT: ${{ inputs.sample_limit }}
+        run: |
+          if [ -f artifacts/input/plusd.csv ]; then
+            archive-ingest import-wikileaks-plusd artifacts/input/plusd.csv --limit "$LIMIT" --output artifacts/raw/plusd.jsonl
+          fi
+          if [ -f artifacts/input/war-diaries.csv ]; then
+            archive-ingest import-wikileaks-war-diaries artifacts/input/war-diaries.csv --limit "$LIMIT" --output artifacts/raw/war-diaries.jsonl
+          fi
+
+      - name: Exercise shared evidence pipeline
+        run: |
+          archive-ingest profile-jsonl artifacts/raw/*.jsonl --output artifacts/reports/profile.json
+          archive-ingest dedupe-jsonl artifacts/raw/*.jsonl --threshold 0.86 --output artifacts/reports/duplicate-candidates.jsonl
+          archive-ingest derive-temporal-claims artifacts/raw/*.jsonl --output artifacts/reports/temporal-claims.jsonl
+          archive-ingest derive-spatial-claims artifacts/raw/*.jsonl --output artifacts/reports/spatial-claims.jsonl
+          archive-ingest derive-entity-claims artifacts/raw/*.jsonl --output artifacts/reports/entity-claims.jsonl
+          archive-ingest prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
+          archive-ingest build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
+          archive-ingest build-store \
+            --database artifacts/wikileaks.sqlite \
+            --records artifacts/raw/*.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
+
+      - name: Publish sample summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def count_jsonl(path):
+              p = Path(path)
+              return sum(1 for line in p.read_text(encoding='utf-8').splitlines() if line.strip()) if p.exists() else 0
+
+          raw = {p.name: count_jsonl(p) for p in sorted(Path('artifacts/raw').glob('*.jsonl'))}
+          summary = {
+              'records': raw,
+              'total_records': sum(raw.values()),
+              'temporal_claims': count_jsonl('artifacts/reports/temporal-claims.jsonl'),
+              'spatial_claims': count_jsonl('artifacts/reports/spatial-claims.jsonl'),
+              'entity_claims': count_jsonl('artifacts/reports/entity-claims.jsonl'),
+              'duplicate_candidates': count_jsonl('artifacts/reports/duplicate-candidates.jsonl'),
+              'research_tasks': count_jsonl('artifacts/reports/work-queue.jsonl'),
+          }
+          Path('artifacts/reports/wikileaks-sample-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wikileaks-sample
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
