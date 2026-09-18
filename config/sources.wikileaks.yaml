@@ -1,0 +1,46 @@
+sources:
+  - id: wikileaks-plusd
+    name: WikiLeaks PlusD / Cablegate
+    type: leaked_document_archive
+    homepage_url: https://search.wikileaks.org/plusd/
+    access_method: public_search_and_bulk_mirrors
+    public_access: true
+    rights_status: source_specific_review_required
+    rights_notes: Preserve original release/mirror provenance; public availability does not establish redistribution rights.
+    metadata_quality: high
+    ingest_mode: bulk_file_preferred
+    media_types: [diplomatic_cable, document]
+    priority: critical
+    estimated_item_count: 251287
+    notes: Treat cable claims as source assertions, not independently verified facts.
+    enabled: true
+
+  - id: wikileaks-war-diaries-iraq
+    name: WikiLeaks Iraq War Logs
+    type: leaked_structured_event_archive
+    homepage_url: https://warlogs.wikileaks.org/
+    access_method: public_search_and_bulk_csv
+    public_access: true
+    rights_status: source_specific_review_required
+    rights_notes: Preserve the original event record and release provenance; casualty fields require corroboration for verified historical claims.
+    metadata_quality: high
+    ingest_mode: bulk_file_preferred
+    media_types: [sigact, event_record]
+    priority: critical
+    estimated_item_count: 391831
+    enabled: true
+
+  - id: wikileaks-war-diaries-afghanistan
+    name: WikiLeaks Afghan War Diary
+    type: leaked_structured_event_archive
+    homepage_url: https://warlogs.wikileaks.org/
+    access_method: public_search_and_bulk_csv
+    public_access: true
+    rights_status: source_specific_review_required
+    rights_notes: Preserve the original event record and release provenance; casualty fields require corroboration for verified historical claims.
+    metadata_quality: high
+    ingest_mode: bulk_file_preferred
+    media_types: [sigact, event_record]
+    priority: critical
+    estimated_item_count: 76910
+    enabled: true
