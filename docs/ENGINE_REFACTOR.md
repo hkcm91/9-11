@@ -158,3 +158,37 @@ is documented in `docs/ENGINE.md`.
 9. CLI `--collection`, documentation, tests.
 
 The repository is runnable and the full test suite green after every step.
+
+## Final verification
+
+Run at the end of the refactor, all green:
+
+| Check | Result |
+| --- | --- |
+| Full test suite | 239 passed (baseline was 110; none were deleted) |
+| September 11 sample pipeline | profile → dedupe → prioritise → temporal/spatial/entity claims → work queue → rights queue → SQLite, all producing the expected counts |
+| Demo collection pipeline | 3 records, 7 tasks, 2 entities, 1 event, 2 relationships, 1 contradiction — through the same engine, no core changes |
+| SQLite still materialises | 15 tables, schema version 4, claims and observations intact |
+| Proposal review lifecycle | unchanged: proposed → reviewed → verified, agent self-verification refused |
+| Raw records never overwritten | a 0.99-confidence temporal claim leaves `source_records` byte-identical and `date_raw` NULL |
+| No collection strings in the engine | `tests/test_engine_purity.py` + a manual grep: the only matches are the letters `nist` inside the word *deterministic* |
+| No AI pathway reaches verified | perfect-confidence decision routes to `human_review`; proposal status is `proposed`; machine `verified` status and `established` assertion level both refused at the validator |
+| Installed package | `pip install -e .` in a clean venv; `archive-ingest`, `archive-query` and `archive-photo-map-info` all work from an unrelated working directory, with collection YAML shipped as package data |
+
+### Known deviations from the brief
+
+1. **`evidence_collections/` instead of `collections/`** — a top-level
+   `collections` package on `pythonpath` shadows the standard library and
+   breaks the interpreter. Same separation, different directory name.
+2. **`src/archive/` was not renamed** — it is the installed package behind
+   three console scripts and every test and workflow. It became the
+   compatibility layer instead; the brief explicitly preferred a less
+   disruptive layout that preserves compatibility.
+3. **The transitional `september11` default** lives in
+   `src/archive/collections_compat.py`, is marked transitional in the module
+   docstring and in `--collection --help`, and is asserted by a test so it
+   cannot drift into the engine.
+4. **The `september11-digital-archive` / `september-11-digital-archive`
+   spelling divergence was not silently unified** — see above. Both are
+   recognised; unifying them would change work-queue and priority output for
+   existing corpora, which is a data decision, not a refactor decision.
