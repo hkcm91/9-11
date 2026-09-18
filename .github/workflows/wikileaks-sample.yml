@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       plusd_url:
-        description: HTTPS URL to a Cablegate/PlusD CSV, JSON, JSONL, or NDJSON export
+        description: HTTPS URL to a Cablegate/PlusD CSV export
         required: false
         default: ""
       war_diaries_url:
-        description: HTTPS URL to an Iraq/Afghan War Diaries CSV, JSON, JSONL, or NDJSON export
+        description: HTTPS URL to an Iraq/Afghan War Diaries CSV export
         required: false
         default: ""
       sample_limit:
