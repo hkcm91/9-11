@@ -82,6 +82,8 @@ def _record_role(item: SourceItem) -> str:
 
     if item.source_id == "nist-wtc-disaster-repository" or media == "repository_entry":
         return "repository"
+    if media == "event_record" or item.metadata_raw.get("document_family") == "sigact":
+        return "event_record"
     if "incident action plan" in title or any(token in media for token in ("document", "text", "pdf")):
         return "document"
     if "voices of 9.11" in collection or "oral history" in collection or "oral_history" in media:
@@ -105,6 +107,8 @@ def _expected_claim_kind(task_type: str, role: str) -> str | None:
             return "interview_time_or_described_event_time"
         if role == "document":
             return "document_coverage"
+        if role == "event_record":
+            return "event_time"
         return "unknown"
     if task_type == "resolve_location":
         if role in {"photo", "video"}:
@@ -113,6 +117,8 @@ def _expected_claim_kind(task_type: str, role: str) -> str | None:
             return "testimony_or_recording_location"
         if role == "document":
             return "document_coverage_location"
+        if role == "event_record":
+            return "event_location"
         return "unknown"
     return None
 
@@ -126,6 +132,7 @@ def _instructions(task_type: str, role: str) -> str:
             "broadcast": "broadcast recording interval",
             "testimony": "interview date and any separately evidenced event times described in the testimony",
             "document": "coverage/effective period of the document",
+            "event_record": "time of the historical event described by the record",
         }.get(role, "historically relevant time represented by this record")
         return (
             f"Find the strongest available evidence for the {role_text}. Return a proposed time or interval, "
@@ -143,12 +150,21 @@ def _instructions(task_type: str, role: str) -> str:
                 "Identify locations tied to the witness's described September 11 experiences and label each semantic role. "
                 "Keep the later interview location separate from event locations and do not infer places from vague narrative text."
             )
+        if role == "event_record":
+            return (
+                "Resolve the event location from structured coordinates/grid references or explicit source text. "
+                "Preserve the original location notation, state conversion uncertainty, cite the source record, "
+                "and do not infer a precise point from a broad region label alone."
+            )
         return (
             "Identify only locations explicitly associated with the recording and label their semantic role. "
             "Do not turn a place merely mentioned in narrative text into a capture location."
         )
     if task_type == "resolve_creator":
-        noun = "issuing organization or original creator" if role == "document" else "original photographer, videographer, broadcaster, recorder, or source"
+        if role == "event_record":
+            noun = "reporting or originating unit/organization"
+        else:
+            noun = "issuing organization or original creator" if role == "document" else "original photographer, videographer, broadcaster, recorder, or source"
         return (
             f"Resolve the {noun}. Preserve aliases and distinguish uploader/custodian from original creator. "
             "Return evidence and confidence rather than overwriting raw metadata."
@@ -201,7 +217,7 @@ def _task_is_applicable(item: SourceItem, task_type: str, role: str) -> bool:
 
 def _role_multiplier(task_type: str, role: str) -> float:
     if task_type == "resolve_location":
-        return {"photo": 1.0, "video": 1.0, "audio": 0.75, "testimony": 0.70}.get(role, 0.55)
+        return {"photo": 1.0, "video": 1.0, "audio": 0.75, "testimony": 0.70, "event_record": 1.0}.get(role, 0.55)
     if task_type == "resolve_time":
         return {
             "photo": 1.0,
@@ -210,6 +226,7 @@ def _role_multiplier(task_type: str, role: str) -> float:
             "broadcast": 0.95,
             "testimony": 0.65,
             "document": 0.55,
+            "event_record": 1.0,
         }.get(role, 0.7)
     if task_type == "resolve_creator":
         return {"testimony": 0.55, "audio": 0.70, "document": 0.75}.get(role, 1.0)
