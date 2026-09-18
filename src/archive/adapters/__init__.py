@@ -5,6 +5,7 @@ from .internet_archive import InternetArchiveAdapter
 from .nist_organized import NistOrganizedMediaAdapter
 from .nist_wtc import NistWtcRepositoryAdapter
 from .september11digital import September11DigitalArchiveAdapter
+from .wikileaks import WikiLeaksPlusDAdapter, WikiLeaksWarDiariesAdapter
 
 __all__ = [
     "ArcGisPhotoMapAdapter",
@@ -12,4 +13,6 @@ __all__ = [
     "NistOrganizedMediaAdapter",
     "NistWtcRepositoryAdapter",
     "September11DigitalArchiveAdapter",
+    "WikiLeaksPlusDAdapter",
+    "WikiLeaksWarDiariesAdapter",
 ]
