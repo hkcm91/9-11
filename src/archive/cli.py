@@ -103,6 +103,22 @@ def build_parser() -> argparse.ArgumentParser:
     import_nist_organized.add_argument("--output", type=Path, required=True)
     import_nist_organized.add_argument("--limit", type=int, default=None)
 
+    import_wikileaks_plusd = subparsers.add_parser(
+        "import-wikileaks-plusd",
+        help="Import Cablegate/PlusD CSV, JSON, JSONL, or NDJSON records",
+    )
+    import_wikileaks_plusd.add_argument("input", type=Path)
+    import_wikileaks_plusd.add_argument("--output", type=Path, required=True)
+    import_wikileaks_plusd.add_argument("--limit", type=int, default=None)
+
+    import_wikileaks_war = subparsers.add_parser(
+        "import-wikileaks-war-diaries",
+        help="Import Iraq/Afghan War Diaries CSV, JSON, JSONL, or NDJSON records",
+    )
+    import_wikileaks_war.add_argument("input", type=Path)
+    import_wikileaks_war.add_argument("--output", type=Path, required=True)
+    import_wikileaks_war.add_argument("--limit", type=int, default=None)
+
     sample_photo_map = subparsers.add_parser("sample-photo-map", help="Sample geolocated metadata from the public archDisk ArcGIS map")
     _add_output_args(sample_photo_map, default_delay=0.25)
     sample_photo_map.add_argument("--app-id", default="1b7d4d22866b445881b181614e25d4d4")
@@ -254,6 +270,24 @@ def main(argv: list[str] | None = None) -> int:
         records = adapter.import_manifest(args.input, limit=args.limit)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} NIST organized-media records to {args.output}")
+        return 0
+
+    if args.command == "import-wikileaks-plusd":
+        from evidence_collections.wikileaks.adapters import WikiLeaksPlusDAdapter
+
+        adapter = WikiLeaksPlusDAdapter()
+        records = adapter.import_file(args.input, limit=args.limit)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} WikiLeaks PlusD/Cablegate records to {args.output}")
+        return 0
+
+    if args.command == "import-wikileaks-war-diaries":
+        from evidence_collections.wikileaks.adapters import WikiLeaksWarDiariesAdapter
+
+        adapter = WikiLeaksWarDiariesAdapter()
+        records = adapter.import_file(args.input, limit=args.limit)
+        _write_jsonl(args.output, records, adapter.serialize_source_item)
+        print(f"wrote {len(records)} WikiLeaks War Diaries records to {args.output}")
         return 0
 
     if args.command == "sample-photo-map":
