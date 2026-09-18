@@ -11,8 +11,22 @@ from typing import Any, Iterable
 from archive.corpus import load_jsonl
 from archive.models import SourceItem
 from archive.proposals import ProposalEnvelope, load_proposal_jsonl
+from historical_engine.models.graph import (
+    ClaimRelation,
+    CollectionRecord,
+    Entity,
+    EntityAlias,
+    Event,
+    Relationship,
+    Revision,
+)
+from historical_engine.storage import graph_store
+from historical_engine.storage.ids import canonical_json, claim_id as _canonical_claim_id
 
-SCHEMA_VERSION = 3
+# 4 adds the evidence-graph tables. The migration is purely additive:
+# `CREATE TABLE IF NOT EXISTS` only, no existing table or row is altered, so a
+# database written by schema 3 is read and extended without conversion.
+SCHEMA_VERSION = 4
 _ALLOWED_REVIEW_STATUSES = {"reviewed", "verified", "rejected", "disputed"}
 
 
@@ -175,6 +189,7 @@ class ArchiveStore:
             CREATE INDEX IF NOT EXISTS idx_reviews_proposal ON proposal_reviews(proposal_id);
             """
         )
+        graph_store.apply_graph_schema(self.connection)
         self.connection.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -183,7 +198,7 @@ class ArchiveStore:
 
     @staticmethod
     def _json(value: Any) -> str:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+        return canonical_json(value)
 
     @classmethod
     def _richness(cls, item: SourceItem) -> int:
@@ -301,8 +316,7 @@ class ArchiveStore:
 
     @classmethod
     def _claim_id(cls, kind: str, payload: dict[str, Any]) -> str:
-        material = cls._json({"kind": kind, "payload": payload})
-        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+        return _canonical_claim_id(kind, payload)
 
     def import_claim_jsonl(self, path: Path, kind: str) -> int:
         if kind not in {"temporal", "spatial", "entity"}:
@@ -463,11 +477,67 @@ class ArchiveStore:
             )
         return review_id
 
+    # -- evidence graph ------------------------------------------------------
+    #
+    # Additive. These never touch `source_records` or `source_observations`;
+    # a derived entity, event, relationship or claim-to-claim edge is stored
+    # alongside the raw observation, never in place of it. Every writer
+    # validates first, so a machine actor cannot insert a verified row.
+
+    def put_collection(self, record: CollectionRecord) -> str:
+        with self.connection:
+            return graph_store.put_collection(self.connection, record)
+
+    def put_entity(self, entity: Entity, *, actor_kind: str = "machine",
+                   allowed_entity_types: Iterable[str] | None = None) -> str:
+        with self.connection:
+            return graph_store.put_entity(
+                self.connection, entity, actor_kind=actor_kind,
+                allowed_entity_types=allowed_entity_types,
+            )
+
+    def put_entity_alias(self, alias: EntityAlias) -> str:
+        with self.connection:
+            return graph_store.put_entity_alias(self.connection, alias)
+
+    def put_event(self, event: Event, *, actor_kind: str = "machine",
+                  allowed_event_types: Iterable[str] | None = None) -> str:
+        with self.connection:
+            return graph_store.put_event(
+                self.connection, event, actor_kind=actor_kind,
+                allowed_event_types=allowed_event_types,
+            )
+
+    def put_relationship(self, relationship: Relationship, *, actor_kind: str = "machine",
+                         allowed_predicates: Iterable[str] | None = None,
+                         allowed_entity_types: Iterable[str] | None = None) -> str:
+        with self.connection:
+            return graph_store.put_relationship(
+                self.connection, relationship, actor_kind=actor_kind,
+                allowed_predicates=allowed_predicates,
+                allowed_entity_types=allowed_entity_types,
+            )
+
+    def put_claim_relation(self, relation: ClaimRelation, *, actor_kind: str = "machine") -> str:
+        with self.connection:
+            return graph_store.put_claim_relation(
+                self.connection, relation, actor_kind=actor_kind
+            )
+
+    def put_revision(self, revision: Revision) -> str:
+        with self.connection:
+            return graph_store.put_revision(self.connection, revision)
+
+    def claim_id_for(self, kind: str, payload: dict[str, Any]) -> str:
+        """The id `import_claim_jsonl` would assign to this claim payload."""
+
+        return self._claim_id(kind, payload)
+
     def stats(self) -> dict[str, int]:
         tables = (
             "source_records", "source_observations", "temporal_claims",
             "spatial_claims", "entity_claims", "agent_proposals",
-            "proposal_reviews",
+            "proposal_reviews", *graph_store.GRAPH_TABLES,
         )
         return {
             table: int(self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])

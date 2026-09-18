@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
@@ -11,6 +10,7 @@ from archive.adapters.nist_organized import (
     spatial_claim_from_nist_row,
     temporal_claim_from_nist_row,
 )
+from historical_engine.claims import serialize_claim
 from evidence_collections.september11.heuristics import document_coverage_claim_from_title
 from evidence_collections.september11.rules import (
     SOURCE_911DA_IDS,
@@ -340,26 +340,12 @@ def derive_entity_claims(records: Iterable[SourceItem]) -> list[EntityReferenceC
 
 
 def serialize_temporal_claim(claim: TemporalClaim) -> dict[str, Any]:
-    payload = asdict(claim)
-    payload["time_kind"] = claim.time_kind.value
-    payload["status"] = claim.status.value
-    if claim.start_time is not None:
-        payload["start_time"] = claim.start_time.isoformat()
-    if claim.end_time is not None:
-        payload["end_time"] = claim.end_time.isoformat()
-    return payload
+    return serialize_claim(claim)
 
 
 def serialize_spatial_claim(claim: SpatialClaim) -> dict[str, Any]:
-    payload = asdict(claim)
-    payload["location_kind"] = claim.location_kind.value
-    payload["status"] = claim.status.value
-    return payload
+    return serialize_claim(claim)
 
 
 def serialize_entity_claim(claim: EntityReferenceClaim) -> dict[str, Any]:
-    payload = asdict(claim)
-    payload["entity_kind"] = claim.entity_kind.value
-    payload["role"] = claim.role.value
-    payload["status"] = claim.status.value
-    return payload
+    return serialize_claim(claim)
