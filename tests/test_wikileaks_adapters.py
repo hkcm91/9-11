@@ -149,9 +149,11 @@ def test_event_record_generates_event_semantic_research_tasks() -> None:
     )
     priority = EnrichmentPriority(
         item_id=item.id,
+        source_id=item.source_id,
+        completeness_score=0.2,
         enrichment_priority=1.0,
-        completeness=0.2,
         missing_fields=["date_raw", "location_raw", "creator_raw"],
+        present_fields=["title_raw", "description_raw"],
         reasons=["fixture"],
     )
     tasks = {task.task_type: task for task in tasks_for_item(item, priority)}
