@@ -279,6 +279,38 @@ def tasks_for_item(
                 instructions=_instructions(task_type, role),
             )
         )
+
+    # Structured military/event records may contain a useful grid reference
+    # without coordinates that the spatial query layer can consume. Queue a
+    # conversion/review task even though location_raw is technically populated.
+    if role == "event_record" and item.metadata_raw.get("mgrs"):
+        has_resolve_location = any(task.task_type == "resolve_location" for task in tasks)
+        has_coordinates = all(
+            item.metadata_raw.get(key) not in (None, "")
+            for key in ("latitude", "longitude")
+        )
+        if not has_resolve_location and not has_coordinates:
+            tasks.append(
+                EnrichmentTask(
+                    task_id=_task_id(item.id, "resolve_location"),
+                    item_id=item.id,
+                    source_id=item.source_id,
+                    task_type="resolve_location",
+                    priority=round(
+                        min(1.0, priority.enrichment_priority * TASK_WEIGHT["resolve_location"]),
+                        4,
+                    ),
+                    source_url=item.source_url,
+                    title=item.title_raw,
+                    creator=item.creator_raw,
+                    date=item.date_raw,
+                    location=item.location_raw,
+                    record_role=role,
+                    expected_claim_kind="event_location",
+                    reasons=[*priority.reasons, "structured grid reference needs coordinate conversion"],
+                    instructions=_instructions("resolve_location", role),
+                )
+            )
     return tasks
 
 
