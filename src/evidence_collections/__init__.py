@@ -20,6 +20,7 @@ from historical_engine.collection_registry import register_collection, set_boots
 BUILTIN_COLLECTIONS: dict[str, str] = {
     "september11": "evidence_collections.september11:build_collection",
     "demo_history": "evidence_collections.demo_history:build_collection",
+    "wikileaks": "evidence_collections.wikileaks:build_collection",
 }
 
 
