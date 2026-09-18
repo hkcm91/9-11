@@ -2,7 +2,7 @@
 
 A source registry is a YAML document describing the custodial sources a
 collection draws on. Nothing here is collection-specific: the same loader
-serves the September 11 registry, the demo registry and any future one.
+serves every collection's registry.
 
 Two document shapes are supported:
 

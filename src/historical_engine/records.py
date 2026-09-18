@@ -2,8 +2,8 @@
 
 The engine deliberately does not import any concrete record class. It reads
 records through this protocol so that a collection may supply its own record
-type, and so that the engine carries no dependency on the September 11
-package that happens to define the first implementation.
+type, and so that the engine carries no dependency on whichever collection
+package happens to define the first implementation.
 """
 
 from __future__ import annotations

@@ -2,8 +2,8 @@
 
 Everything here is a function of the *record role* — never of a source
 identifier. Collections override any of it through the ``Collection``
-interface; the September 11 collection currently overrides none of it, which is
-the clearest evidence that these rules really were generic.
+interface. The first collection migrated onto the engine overrides none of it,
+which is the clearest evidence that these rules really were generic.
 """
 
 from __future__ import annotations

@@ -7,15 +7,26 @@ and the engine is told how to discover them through a bootstrap callable that
 the application layer installs.
 
 ``src/evidence_collections/__init__.py`` installs the built-in bootstrap; the
-engine itself names no collection.
+engine itself names no collection. When no bootstrap has been installed yet,
+discovery imports the collections *namespace package* named below — a
+namespace, not a collection — so that a plain ``get_collection("…")`` works
+without the caller having to know which module to import first.
 """
 
 from __future__ import annotations
 
+import os
 import threading
 from typing import Callable, Iterable
 
 from historical_engine.collection import Collection
+
+#: The package whose import registers the available collections. This names a
+#: *namespace*, not any particular collection, so the engine stays agnostic;
+#: an application with its collections elsewhere overrides it with the
+#: environment variable below or by calling ``set_bootstrap`` directly.
+DEFAULT_COLLECTIONS_PACKAGE = "evidence_collections"
+COLLECTIONS_PACKAGE_ENV_VAR = "HISTORICAL_ENGINE_COLLECTIONS_PACKAGE"
 
 _LOCK = threading.RLock()
 _COLLECTIONS: dict[str, Collection] = {}
@@ -41,15 +52,46 @@ def set_bootstrap(bootstrap: Callable[[], None] | None) -> None:
         _BOOTSTRAPPED = False
 
 
+def _default_bootstrap() -> None:
+    """Import the collections package so it can register itself.
+
+    A missing package is not an error: the engine is perfectly usable with no
+    collection installed, and callers that construct one directly never need
+    discovery at all.
+    """
+
+    from importlib import import_module
+
+    package = os.environ.get(COLLECTIONS_PACKAGE_ENV_VAR, "").strip() or DEFAULT_COLLECTIONS_PACKAGE
+    try:
+        import_module(package)
+    except ImportError:
+        return
+
+
+_RUNNING = False
+
+
 def _ensure_bootstrapped() -> None:
-    global _BOOTSTRAPPED
+    global _BOOTSTRAPPED, _RUNNING
     with _LOCK:
-        if _BOOTSTRAPPED or _BOOTSTRAP is None:
+        if _BOOTSTRAPPED or _RUNNING:
             return
-        # Set the flag first: a bootstrap that registers collections will call
-        # back into this module, and re-entering must not loop.
-        _BOOTSTRAPPED = True
-        _BOOTSTRAP()
+        # `_RUNNING` guards re-entry: discovery imports the collections
+        # package, which calls `set_bootstrap`, which comes back through here.
+        _RUNNING = True
+        try:
+            bootstrap = _BOOTSTRAP
+            if bootstrap is None:
+                # Importing the collections package installs the real
+                # bootstrap, which must then actually run.
+                _default_bootstrap()
+                bootstrap = _BOOTSTRAP
+            if bootstrap is not None:
+                bootstrap()
+            _BOOTSTRAPPED = True
+        finally:
+            _RUNNING = False
 
 
 def register_collection(collection: Collection, *, replace: bool = False) -> Collection:
@@ -88,7 +130,7 @@ def iter_collections() -> list[Collection]:
 
 
 def reset_registry() -> None:
-    """Test helper: forget every registration and re-run bootstrap on demand."""
+    """Test helper: forget every registration and re-run discovery on demand."""
 
     global _BOOTSTRAPPED
     with _LOCK:

@@ -1,9 +1,9 @@
 """The collection abstraction.
 
-A *collection* is one historical corpus — September 11, a document release, a
-conflict archive — expressed as configuration plus a small amount of code. The
-engine talks to a collection through this interface and never through a
-hardcoded source identifier.
+A *collection* is one historical corpus — a set of attacks, a document
+release, a conflict archive — expressed as configuration plus a small amount of
+code. The engine talks to a collection through this interface and never through
+a hardcoded source identifier.
 
 ``BaseCollection`` supplies generic behaviour for everything, so a new
 collection can be created from a YAML ontology and a YAML source registry with
