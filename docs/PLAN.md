@@ -1,5 +1,11 @@
 # Project Plan
 
+> **Architecture note.** The pipeline described below now runs as the
+> `september11` collection on top of a reusable Historical Evidence Engine.
+> The goals, principles and phases are unchanged; see `docs/ENGINE.md` for the
+> engine and collection model, and `docs/ENGINE_REFACTOR.md` for the audit and
+> migration notes.
+
 ## Goal
 
 Build a trustworthy, explorable historical interface for September 11, 2001 that combines public photos, video, audio, oral histories, events, people, units, buildings, and locations into a synchronized map + timeline.

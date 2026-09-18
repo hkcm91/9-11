@@ -246,3 +246,42 @@ Store confidence numerically (`0.0`–`1.0`) but present plain-language labels i
 - `0.00–0.599`: low / inferred
 
 Confidence does not replace evidence. A claim without inspectable evidence should never become verified solely because a model reports a high score.
+
+---
+
+## Implementation status after the engine refactor
+
+This document describes the target model. What is implemented, and where:
+
+| Concept | Implemented as | Module |
+| --- | --- | --- |
+| Source, SourceItem | `SourceItem`, `source_records`, `source_observations` | `archive.models`, `archive.store` |
+| TemporalClaim, SpatialClaim, EntityReferenceClaim | dataclasses + SQLite tables | `archive.models`, `archive.store` |
+| AgentProposal, review history | `ProposalEnvelope`, `agent_proposals`, `proposal_reviews` | `historical_engine.proposals`, `archive.store` |
+| Collection | `CollectionRecord` + `collections` table | `historical_engine.models.graph` |
+| Entity, EntityAlias | `Entity`, `EntityAlias` + `entities`, `entity_aliases` | `historical_engine.models.graph` |
+| Event | `Event` + `events` | `historical_engine.models.graph` |
+| Relationship | `Relationship` + `relationships`, with an `assertion_level` | `historical_engine.models.graph` |
+| Evidence | `EvidenceItem`, round-trips the embedded `EvidenceRef` shape | `historical_engine.models.graph` |
+| Claim-to-claim reasoning | `ClaimRelation` + `claim_relations` | `historical_engine.models.graph` |
+| Revision / supersession | `Revision` + `revisions` | `historical_engine.models.graph` |
+| Transcript | not yet implemented | — |
+
+The graph tables were added by an **additive** migration (schema 3 → 4):
+`CREATE TABLE IF NOT EXISTS` only. No existing table was dropped, renamed or
+rewritten, and no existing row was touched.
+
+### Entity types
+
+The engine's generic vocabulary is `person`, `organization`, `place`,
+`building`, `unit`, `vehicle`, `vessel`, `aircraft`, `document`, `other`. A
+collection ontology extends it — the September 11 ontology adds
+`responder_unit`, `broadcast_outlet` and `flight` — rather than the engine
+hardcoding responder-specific concepts.
+
+### Assertion levels
+
+A relationship must declare how strongly the record supports it:
+`mentioned`, `associated`, `alleged`, `witnessed`, `reported`, `corroborated`,
+`contradicted`, `established`. `corroborated` and `established` can only be set
+by a human actor. See `docs/ENGINE.md`.

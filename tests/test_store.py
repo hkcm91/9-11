@@ -8,7 +8,7 @@ import pytest
 
 from archive.models import SourceItem
 from archive.proposals import validate_proposal
-from archive.store import ArchiveStore
+from archive.store import SCHEMA_VERSION, ArchiveStore
 
 
 def make_item(*, title: str, description: str | None = None, metadata: dict | None = None) -> SourceItem:
@@ -194,4 +194,6 @@ def test_schema_version_is_recorded(tmp_path: Path) -> None:
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         ).fetchone()[0]
 
-    assert version == "3"
+    # Schema 4 added the evidence-graph tables. The migration is additive, so
+    # the version is asserted against the constant rather than pinned to 3.
+    assert version == str(SCHEMA_VERSION)

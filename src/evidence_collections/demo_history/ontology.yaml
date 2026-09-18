@@ -1,0 +1,26 @@
+# Ontology for the synthetic `demo_history` collection.
+#
+# This corpus is entirely fictional. It exists to prove that the engine runs a
+# second collection with no core-code changes — not to assert anything about
+# real history.
+
+collection_id: demo_history
+version: "1"
+
+extra_entity_types:
+  - mill
+
+extra_event_types:
+  - fire
+  - inquiry
+
+extra_predicates:
+  - operated_by
+  - destroyed_in
+
+sensitive:
+  note: >-
+    Synthetic fixtures. The sensitive policy is still exercised so that the
+    generic human-review path has coverage in a second collection.
+  force_human_review_tasks:
+    - resolve_creator

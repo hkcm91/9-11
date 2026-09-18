@@ -12,6 +12,7 @@ from archive.adapters import (
     NistWtcRepositoryAdapter,
     September11DigitalArchiveAdapter,
 )
+from archive.collections_compat import DEFAULT_COLLECTION_ID, resolve_collection
 from archive.corpus import load_jsonl, reconcile_source_snapshots
 from archive.adapters.nist_organized import nist_inventory_report
 from archive.dedupe import find_candidates
@@ -38,7 +39,21 @@ def _add_output_args(parser: argparse.ArgumentParser, *, default_delay: float) -
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="archive-ingest")
+    parser.add_argument(
+        "--collection",
+        default=None,
+        help=(
+            "Collection to operate on (for example september11 or demo_history). "
+            f"TRANSITIONAL: defaults to '{DEFAULT_COLLECTION_ID}' so existing commands "
+            "keep working; set HISTORICAL_ENGINE_COLLECTION to change the default."
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    list_collections = subparsers.add_parser(
+        "list-collections", help="List the collections registered with the engine"
+    )
+    list_collections.add_argument("--verbose", action="store_true")
 
     sample_911da = subparsers.add_parser("sample-911da", help="Sample metadata from the September 11 Digital Archive")
     _add_output_args(sample_911da, default_delay=1.0)
@@ -92,8 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_args(sample_photo_map, default_delay=0.25)
     sample_photo_map.add_argument("--app-id", default="1b7d4d22866b445881b181614e25d4d4")
 
-    sources = subparsers.add_parser("list-sources", help="List enabled Phase 0 sources")
-    sources.add_argument("--registry", type=Path, default=Path("config/sources.phase0.yaml"))
+    sources = subparsers.add_parser("list-sources", help="List the active collection's enabled sources")
+    sources.add_argument(
+        "--registry",
+        type=Path,
+        default=None,
+        help="Registry file to read instead of the collection's own sources.yaml",
+    )
 
     profile = subparsers.add_parser("profile-jsonl", help="Profile metadata coverage in one or more JSONL corpora")
     profile.add_argument("inputs", nargs="+", type=Path)
@@ -133,6 +153,13 @@ def build_parser() -> argparse.ArgumentParser:
     rights_queue.add_argument("inputs", nargs="+", type=Path)
     rights_queue.add_argument("--output", type=Path, required=True)
 
+    demo = subparsers.add_parser(
+        "run-demo-pipeline",
+        help="Run the synthetic demo_history corpus end-to-end through the generic engine",
+    )
+    demo.add_argument("--database", type=Path, required=True)
+    demo.add_argument("--stats-output", type=Path, default=None)
+
     store = subparsers.add_parser("build-store", help="Materialize source observations and claims into SQLite")
     store.add_argument("--database", type=Path, required=True)
     store.add_argument("--records", nargs="+", type=Path, required=True)
@@ -160,6 +187,18 @@ def _load_many(paths: list[Path]):
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    collection = resolve_collection(getattr(args, "collection", None))
+
+    if args.command == "list-collections":
+        from historical_engine.collection_registry import iter_collections
+
+        for entry in iter_collections():
+            marker = "*" if entry.id == collection.id else " "
+            print(f"{marker} {entry.id:16} {entry.name}")
+            if args.verbose:
+                print(f"    ontology v{entry.ontology.version}, {len(entry.sources())} enabled sources")
+                print(f"    {entry.description}")
+        return 0
 
     if args.command == "sample-911da":
         adapter = September11DigitalArchiveAdapter(request_delay_s=args.delay)
@@ -225,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "list-sources":
-        sources = enabled_sources(args.registry)
+        sources = enabled_sources(args.registry) if args.registry else collection.sources()
         for source in sources:
             print(f"{source.priority.upper():8} {source.id:40} {source.name}")
         print(f"{len(sources)} enabled sources")
@@ -260,44 +299,55 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "prioritize-jsonl":
         records = _load_many(args.inputs)
-        priorities = prioritize_records(records)
+        priorities = prioritize_records(records, collection=collection)
         _write_jsonl(args.output, priorities, asdict)
         print(f"wrote {len(priorities)} enrichment priorities to {args.output}")
         return 0
 
     if args.command == "derive-temporal-claims":
         records = _load_many(args.inputs)
-        claims = derive_temporal_claims(records)
+        claims = derive_temporal_claims(records, collection=collection)
         _write_jsonl(args.output, claims, serialize_temporal_claim)
         print(f"wrote {len(claims)} deterministic temporal claims to {args.output}")
         return 0
 
     if args.command == "derive-spatial-claims":
         records = _load_many(args.inputs)
-        claims = derive_spatial_claims(records)
+        claims = derive_spatial_claims(records, collection=collection)
         _write_jsonl(args.output, claims, serialize_spatial_claim)
         print(f"wrote {len(claims)} provenance-backed spatial claims to {args.output}")
         return 0
 
     if args.command == "derive-entity-claims":
         records = _load_many(args.inputs)
-        claims = derive_entity_claims(records)
+        claims = derive_entity_claims(records, collection=collection)
         _write_jsonl(args.output, claims, serialize_entity_claim)
         print(f"wrote {len(claims)} entity-reference claims to {args.output}")
         return 0
 
     if args.command == "build-work-queue":
         records = _load_many(args.inputs)
-        tasks = build_work_queue(records)
+        tasks = build_work_queue(records, collection=collection)
         _write_jsonl(args.output, tasks, asdict)
         print(f"wrote {len(tasks)} research enrichment tasks to {args.output}")
         return 0
 
     if args.command == "build-rights-queue":
         records = _load_many(args.inputs)
-        tasks = build_rights_queue(records)
+        tasks = build_rights_queue(records, collection=collection)
         _write_jsonl(args.output, tasks, asdict)
         print(f"wrote {len(tasks)} publication/rights-clearance tasks to {args.output}")
+        return 0
+
+    if args.command == "run-demo-pipeline":
+        from evidence_collections.demo_history.pipeline import run_pipeline
+
+        payload = run_pipeline(args.database)
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if args.stats_output:
+            args.stats_output.parent.mkdir(parents=True, exist_ok=True)
+            args.stats_output.write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
         return 0
 
     if args.command == "build-store":
