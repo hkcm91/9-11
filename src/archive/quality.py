@@ -1,94 +1,67 @@
+"""Backward-compatible enrichment-prioritisation facade.
+
+Scoring is generic and lives in ``historical_engine.quality``. How much each
+custodial source is worth — and which metadata shapes are worth flagging to a
+researcher — belongs to the collection.
+"""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 from typing import Iterable
 
-from archive.models import SourceItem
+from archive.collections_compat import resolve_collection
+from historical_engine.collection import Collection
+from historical_engine.quality import (
+    DEFAULT_SOURCE_VALUE,
+    WEIGHTS,
+    EnrichmentPriority,
+)
+from historical_engine.quality import prioritize_item as _prioritize_item
+from historical_engine.records import SourceRecord
+
+__all__ = [
+    "DEFAULT_SOURCE_VALUE",
+    "EnrichmentPriority",
+    "SOURCE_VALUE",
+    "WEIGHTS",
+    "prioritize_item",
+    "prioritize_records",
+]
 
 
-@dataclass(slots=True)
-class EnrichmentPriority:
-    item_id: str
-    source_id: str
-    completeness_score: float
-    enrichment_priority: float
-    missing_fields: list[str]
-    present_fields: list[str]
-    reasons: list[str]
+def _source_value_table() -> dict[str, float]:
+    from evidence_collections.september11.rules import SOURCE_VALUE as table
 
-    def to_dict(self) -> dict:
-        return asdict(self)
+    return dict(table)
 
 
-# Weighted toward fields needed to place evidence in the Explorer's core
-# dimensions: what, when, where, who, provenance/rights.
-WEIGHTS = {
-    "title_raw": 0.08,
-    "description_raw": 0.07,
-    "creator_raw": 0.14,
-    "date_raw": 0.20,
-    "location_raw": 0.20,
-    "rights_raw": 0.10,
-    "collection_raw": 0.08,
-    "media_type_raw": 0.08,
-    "source_url": 0.05,
-}
-
-SOURCE_VALUE = {
-    "nist-wtc-organized-media": 1.00,
-    "nist-wtc-disaster-repository": 0.85,
-    "september-11-digital-archive": 0.80,
-    "internet-archive-understanding-911": 0.85,
-}
+def __getattr__(name: str):
+    # ``archive.quality.SOURCE_VALUE`` was the 9/11 per-source value table. It
+    # now belongs to the September 11 collection; the name is kept as a
+    # deprecated read-only view so existing imports keep working.
+    if name == "SOURCE_VALUE":
+        return _source_value_table()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _present(value) -> bool:
-    return value not in (None, "", [], {}, ())
-
-
-def prioritize_item(item: SourceItem) -> EnrichmentPriority:
-    present: list[str] = []
-    missing: list[str] = []
-    completeness = 0.0
-    for field_name, weight in WEIGHTS.items():
-        if _present(getattr(item, field_name)):
-            completeness += weight
-            present.append(field_name)
-        else:
-            missing.append(field_name)
-
-    reasons: list[str] = []
-    if "date_raw" in missing:
-        reasons.append("missing historical time/date")
-    if "location_raw" in missing:
-        reasons.append("missing map location")
-    if "creator_raw" in missing:
-        reasons.append("missing creator/source identity")
-    if "rights_raw" in missing:
-        reasons.append("reuse/rights status unresolved")
-    if item.metadata_raw.get("_nist_normalized"):
-        reasons.append("NIST structured visual metadata available")
-    if item.metadata_raw.get("_file_summary"):
-        reasons.append("media-file metadata available for deeper analysis")
-
-    source_value = SOURCE_VALUE.get(item.source_id, 0.65)
-    # Priority is intentionally not simply inverse completeness. Records with
-    # some useful structure are often cheaper to solve than almost-empty ones.
-    information_gain = 1.0 - completeness
-    solvability_bonus = min(0.15, len(present) * 0.015)
-    priority = min(1.0, source_value * (information_gain + solvability_bonus))
-
-    return EnrichmentPriority(
-        item_id=item.id,
-        source_id=item.source_id,
-        completeness_score=round(completeness, 4),
-        enrichment_priority=round(priority, 4),
-        missing_fields=missing,
-        present_fields=present,
-        reasons=reasons,
+def prioritize_item(
+    item: SourceRecord,
+    *,
+    collection: Collection | str | None = None,
+) -> EnrichmentPriority:
+    active = resolve_collection(collection)
+    return _prioritize_item(
+        item,
+        source_value=active.source_value(item.source_id),
+        extra_reasons=active.hooks.priority_reasons,
     )
 
 
-def prioritize_records(records: Iterable[SourceItem]) -> list[EnrichmentPriority]:
-    priorities = [prioritize_item(item) for item in records]
+def prioritize_records(
+    records: Iterable[SourceRecord],
+    *,
+    collection: Collection | str | None = None,
+) -> list[EnrichmentPriority]:
+    active = resolve_collection(collection)
+    priorities = [prioritize_item(item, collection=active) for item in records]
     return sorted(priorities, key=lambda row: (-row.enrichment_priority, row.item_id))

@@ -1,0 +1,51 @@
+
+# Ontology for the September 11, 2001 collection.
+#
+# `extra_*` keys ADD to the engine's generic vocabulary; a bare key would
+# replace it. Only concepts that are genuinely specific to this corpus belong
+# here — the engine keeps person/organization/place/building/unit/vehicle/
+# vessel/aircraft/document/other for everyone.
+
+collection_id: september11
+version: "1"
+
+extra_entity_types:
+  # The engine has the generic `unit`; this corpus works with emergency-service
+  # units constantly and benefits from naming them precisely.
+  - responder_unit
+  - broadcast_outlet
+  - flight
+
+extra_event_types:
+  - impact
+  - collapse
+  - evacuation
+  - rescue_operation
+  - broadcast_segment
+  - oral_history_interview
+
+extra_predicates:
+  - depicts_building
+  - broadcast_by
+  - photographed_by
+  - interviewed
+  - responded_to
+  - evacuated_from
+
+# Record roles used by this collection's work queue. `broadcast` and the rest
+# are already generic; nothing extra is needed today.
+extra_record_roles: []
+
+sensitive:
+  note: >-
+    This corpus documents the deaths of nearly three thousand people and the
+    long-term illness of responders and residents. Machine inference about
+    named individuals is never sufficient on its own.
+  # Testimony is first-person accounts from survivors and bereaved families.
+  # Any machine-proposed person link on testimony goes to a human.
+  force_human_review_roles:
+    - testimony
+  prohibited_inferences:
+    - identify_person_from_image
+    - infer_death_or_injury_of_named_individual
+    - infer_culpability

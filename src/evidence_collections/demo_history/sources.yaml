@@ -1,0 +1,46 @@
+# Synthetic source registry for the `demo_history` collection.
+# Every entry is fictional; the URLs resolve to nothing and are never fetched.
+
+sources:
+  - id: demo-borough-record-office
+    name: Riverbridge Borough Record Office (synthetic)
+    type: municipal_archive
+    homepage_url: https://example.invalid/demo/borough-record-office
+    access_method: local_fixture
+    public_access: true
+    rights_status: synthetic_fixture_no_rights_claim
+    rights_notes: Synthetic fixture data. No real rights are asserted or implied.
+    metadata_quality: high
+    ingest_mode: metadata_first
+    media_types: [document]
+    priority: high
+    estimated_item_count: 1
+    enabled: true
+
+  - id: demo-oral-history-project
+    name: Riverbridge Oral History Project (synthetic)
+    type: oral_history_project
+    homepage_url: https://example.invalid/demo/oral-history
+    access_method: local_fixture
+    public_access: true
+    rights_status: synthetic_fixture_no_rights_claim
+    metadata_quality: medium
+    ingest_mode: metadata_first
+    media_types: [audio, testimony]
+    priority: high
+    estimated_item_count: 1
+    enabled: true
+
+  - id: demo-photo-collection
+    name: Riverbridge Photographic Collection (synthetic)
+    type: photographic_collection
+    homepage_url: https://example.invalid/demo/photographs
+    access_method: local_fixture
+    public_access: true
+    rights_status: synthetic_fixture_no_rights_claim
+    metadata_quality: low
+    ingest_mode: metadata_first
+    media_types: [photo]
+    priority: medium
+    estimated_item_count: 1
+    enabled: true

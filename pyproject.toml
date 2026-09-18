@@ -16,5 +16,13 @@ archive-photo-map-info = "archive.photo_map_inventory:main"
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Collections ship their ontology, source registry and fixtures as data.
+"evidence_collections.september11" = ["*.yaml"]
+"evidence_collections.demo_history" = ["*.yaml", "fixtures/*.jsonl"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
