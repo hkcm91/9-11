@@ -2,6 +2,15 @@ name: jev-live-smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      archive_run_id:
+        description: "Optional phase0-scale run to review with NIST image anchors; empty runs the existing smoke test"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   smoke:
@@ -27,11 +36,13 @@ jobs:
         run: archive-ingest jev-config-check
 
       - name: Run controlled Jev smoke queue
+        if: inputs.archive_run_id == ''
         run: |
           mkdir -p artifacts
           archive-ingest --collection wikileaks run-jev-decisions             src/evidence_collections/wikileaks/fixtures/jev_smoke_requests.jsonl             --output artifacts/jev-smoke-decisions.jsonl             --proposal-output artifacts/jev-smoke-proposals.jsonl             --agent-version jev-live-smoke-v1
 
       - name: Print secret-safe decision summary
+        if: inputs.archive_run_id == ''
         run: |
           python - <<'PY'
           import json
@@ -61,7 +72,20 @@ jobs:
               )
           PY
 
+      - name: Order archived media against NIST image anchors
+        if: inputs.archive_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_RUN_ID: ${{ inputs.archive_run_id }}
+        run: |
+          gh run download "$ARCHIVE_RUN_ID" --name phase0-scale-corpus --dir corpus
+          mkdir -p artifacts
+          cp corpus/archive.sqlite artifacts/anchor-ordered.sqlite
+          python -m evidence_collections.september11.anchor_ordering \
+            --database artifacts/anchor-ordered.sqlite --output artifacts --jev
+
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: jev-live-smoke
           path: artifacts/

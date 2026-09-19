@@ -29,3 +29,38 @@ uncertainty. This metadata review does not pretend to inspect video or images.
 Existing databases retain their old claims. Rebuild derived claims into a fresh
 database to use the improved precision handling; do not silently replace reviewed
 claims in a previously reviewed database.
+
+## NIST anchor ordering pilot
+
+`python -m evidence_collections.september11.anchor_ordering --database archive.sqlite
+--output reports --jev` builds attachment-level minute candidates and reviews a
+small, visually inspected pilot with Jev. The optional `archive_run_id` input on
+`jev-live-smoke` reuses a completed `phase0-scale-corpus` artifact, avoiding a new
+crawl. No model credentials are exported.
+
+The checked-in anchor catalog records the report URL, PDF and printed page,
+figure, displayed time, clock basis, creator, observations, source image URL and
+image SHA-256. Five inspected figures from NIST NCSTAR 1-5A are included. Two
+Sean Adair attachments appear to match figures 7-5 and 7-8; these remain proposed
+visual matches. Their reported minutes are 09:03 EDT. The other inspected images
+support sequence proposals but not inferred equal spacing or fabricated times.
+
+NIST section 3.6 (PDF page 119) explains the five-second adjustment between its
+original database and precise reported times. The catalog uses published adjusted
+figure labels without applying the correction twice. Figure 7-5's integer label
+and fractional impact-relative caption are both retained instead of silently
+reconciling rounding. Per-image uncertainty not printed in a caption remains
+unknown; the report's overall three-second accuracy statistic is not inherited.
+
+`reference_image_anchors`, `media_minute_candidates` and
+`anchor_ordering_decisions` are separate research tables. No source metadata,
+capture claim, or review status is overwritten. The JSON export labels candidates
+as source-reported minute, broad range, group timing only, broadcast interval only,
+open bound, unknown, or proposed anchor match. Multiple images under one record
+never automatically inherit an individual capture time. Jev sees the documented
+visual observations as text; it does not inspect image pixels in this pipeline.
+
+This is a partial ordering, not a verified total ordering of the collection.
+More independent image matches, calibrated camera series, or continuous timed
+video are needed to narrow broad intervals. The source files remain hosted by
+their custodians and are not included in the code or output package.
