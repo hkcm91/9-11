@@ -307,8 +307,9 @@ Example safe output:
 {
   "api_key_configured": true,
   "api_url_configured": true,
-  "auth_header_configured": false,
-  "auth_prefix_configured": false,
+  "auth_header_configured": true,
+  "auth_prefix_configured": true,
+  "model": "jev-latest",
   "ready_for_transport": true
 }
 ```
