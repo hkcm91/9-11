@@ -186,6 +186,12 @@ def build_parser() -> argparse.ArgumentParser:
     graph_quality.add_argument("--markdown-output", type=Path, default=None)
     graph_quality.add_argument("--high-degree-threshold", type=int, default=20)
 
+    jev_config = subparsers.add_parser(
+        "jev-config-check",
+        help="Check whether TypeSafe/Jev credentials and endpoint configuration are available without printing secrets",
+    )
+    jev_config.add_argument("--dotenv", type=Path, default=Path(".env"))
+
     resolution_candidates = subparsers.add_parser(
         "build-resolution-candidates",
         help="Generate reviewable same-entity and same-event decision requests from a graph",
@@ -426,6 +432,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
+
+    if args.command == "jev-config-check":
+        from historical_engine.ai.typesafe_config import typesafe_config_from_env
+
+        config = typesafe_config_from_env(dotenv_path=args.dotenv)
+        print(json.dumps(config.safe_status(), indent=2, sort_keys=True))
+        return 0 if config.ready_for_transport else 1
 
     if args.command == "build-resolution-candidates":
         from historical_engine.resolution_candidates import write_candidates
