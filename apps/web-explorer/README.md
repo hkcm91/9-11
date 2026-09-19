@@ -35,7 +35,10 @@ Then open `http://localhost:8000`.
 
 ## Current MVP
 
-- Lower Manhattan map (Leaflet + OpenStreetMap)
+- Stylized pitched Lower Manhattan map (MapLibre GL + OpenFreeMap)
+- GPU-rendered 3D city massing with a historical WTC exclusion area
+- Georeferenced 3D North/South Tower reconstruction, including the North Tower antenna
+- Independent toggles for city massing, historical WTC reconstruction, footprint reference, and camera heading
 - September 11 morning timeline scrubber
 - configurable visible-time window
 - media type / confidence / text filters
@@ -47,7 +50,9 @@ Then open `http://localhost:8000`.
 
 ## Intentional limits
 
-This is not yet the final public product. It does not currently provide media
-previews, story threads, sensitive-content classification, camera frustums,
-authentication, or reviewer actions. Those should be added only after the first
+This is not yet the final public product. The current Twin Towers are lightweight
+geographic extrusions intended to establish the historical-atlas camera, scale, and
+site placement. Detailed GLB/Three.js architecture can replace them without changing
+the evidence model. The explorer does not currently provide story threads, full
+camera frustums, authentication, or reviewer actions. Those should be added only after the first
 mixed real corpus shows which read-model fields are stable enough to expose.
