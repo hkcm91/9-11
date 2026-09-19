@@ -28,6 +28,7 @@ jobs:
     env:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
       TYPESAFE_API_URL: ${{ vars.TYPESAFE_API_URL }}
+      TYPESAFE_MODEL: ${{ vars.TYPESAFE_MODEL }}
       TYPESAFE_API_AUTH_HEADER: ${{ vars.TYPESAFE_API_AUTH_HEADER }}
       TYPESAFE_API_AUTH_PREFIX: ${{ vars.TYPESAFE_API_AUTH_PREFIX }}
     steps:
