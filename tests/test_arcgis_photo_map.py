@@ -106,6 +106,47 @@ def test_feature_id_fallback_is_deterministic() -> None:
     assert first.source_item_id == second.source_item_id
 
 
+def test_query_attachments_preserves_remote_media_urls(monkeypatch) -> None:
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+
+    def fake_get(url: str, params=None):
+        assert url.endswith("/queryAttachments")
+        assert params["objectIds"] == "7,8"
+        return {
+            "attachmentGroups": [
+                {
+                    "parentObjectId": 7,
+                    "attachmentInfos": [
+                        {
+                            "id": 44,
+                            "name": "photo.jpg",
+                            "contentType": "image/jpeg",
+                            "size": 12345,
+                        }
+                    ],
+                },
+                {
+                    "parentObjectId": 8,
+                    "attachmentInfos": [
+                        {
+                            "id": 45,
+                            "name": "notes.pdf",
+                            "contentType": "application/pdf",
+                            "size": 400,
+                        }
+                    ],
+                },
+            ]
+        }
+
+    monkeypatch.setattr(adapter, "_get_json_url", fake_get)
+    found = adapter.query_attachments("https://example.test/FeatureServer/0", [7, 8])
+
+    assert found["7"][0]["url"] == "https://example.test/FeatureServer/0/7/attachments/44"
+    assert found["7"][0]["content_type"] == "image/jpeg"
+    assert "8" not in found
+
+
 def test_feature_count_and_object_ids_use_transfer_limit_safe_queries(monkeypatch) -> None:
     adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
     calls: list[dict] = []

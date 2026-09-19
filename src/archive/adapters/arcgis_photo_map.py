@@ -27,9 +27,9 @@ class ArcGisPhotoMapError(RuntimeError):
 class ArcGisPhotoMapAdapter:
     """Resolve the public archDisk ArcGIS app into geospatial photo metadata.
 
-    The adapter intentionally ignores attachments and non-point context layers.
-    Building footprints and other map reference geometry are useful to the UI,
-    but they are not photographs and must not enter the historical media corpus.
+    Point features become evidence records and public ArcGIS attachments are
+    preserved as remote media references. Building footprints and other context
+    geometry remain UI reference layers rather than historical media records.
     """
 
     def __init__(
@@ -237,6 +237,71 @@ class ArcGisPhotoMapAdapter:
             raise ArcGisPhotoMapError("ArcGIS feature query did not return a features array")
         return payload
 
+    @staticmethod
+    def _layer_advertises_attachments(layer: dict[str, Any]) -> bool:
+        raw_layer = layer.get("raw_layer") if isinstance(layer.get("raw_layer"), dict) else {}
+        popup = raw_layer.get("popupInfo") if isinstance(raw_layer.get("popupInfo"), dict) else {}
+        if popup.get("showAttachments") is True:
+            return True
+        elements = popup.get("popupElements")
+        return isinstance(elements, list) and any(
+            isinstance(element, dict) and element.get("type") == "attachments"
+            for element in elements
+        )
+
+    def query_attachments(
+        self,
+        layer_url: str,
+        object_ids: list[int | str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return public media attachments keyed by parent object id.
+
+        The archive stores remote ArcGIS URLs and metadata only; attachment
+        bytes are never mirrored into the corpus.
+        """
+        if not object_ids:
+            return {}
+        endpoint = f"{self._layer_zero_url(layer_url)}/queryAttachments"
+        payload = self._get_json_url(
+            endpoint,
+            {"objectIds": ",".join(str(value) for value in object_ids), "f": "json"},
+        )
+        groups = payload.get("attachmentGroups") if isinstance(payload, dict) else None
+        if not isinstance(groups, list):
+            raise ArcGisPhotoMapError("ArcGIS attachment query did not return attachmentGroups")
+
+        base_url = self._layer_zero_url(layer_url)
+        result: dict[str, list[dict[str, Any]]] = {}
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            parent = group.get("parentObjectId")
+            infos = group.get("attachmentInfos")
+            if parent is None or not isinstance(infos, list):
+                continue
+            normalized: list[dict[str, Any]] = []
+            for info in infos:
+                if not isinstance(info, dict):
+                    continue
+                attachment_id = info.get("id")
+                if attachment_id is None:
+                    continue
+                content_type = str(info.get("contentType") or "").strip()
+                if not content_type.startswith(("image/", "video/", "audio/")):
+                    continue
+                normalized.append(
+                    {
+                        "id": attachment_id,
+                        "name": str(info.get("name") or "").strip() or None,
+                        "content_type": content_type or None,
+                        "size": info.get("size"),
+                        "url": f"{base_url}/{parent}/attachments/{attachment_id}",
+                    }
+                )
+            if normalized:
+                result[str(parent)] = normalized
+        return result
+
     def iter_feature_pages(
         self,
         layer_url: str,
@@ -318,6 +383,7 @@ class ArcGisPhotoMapAdapter:
         *,
         layer: dict[str, Any],
         spatial_reference: Any = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> SourceItem:
         attrs = feature.get("attributes") if isinstance(feature.get("attributes"), dict) else {}
         geometry = feature.get("geometry")
@@ -340,6 +406,12 @@ class ArcGisPhotoMapAdapter:
         rights = self._first_attr(attrs, ("Rights", "Copyright", "License", "Credit"))
         source_reference = self._first_attr(attrs, ("sourceURL", "SourceURL", "URL"))
 
+        lowered_attrs = {str(key).lower(): value for key, value in attrs.items()}
+
+        def flagged(name: str) -> bool:
+            value = lowered_attrs.get(name.lower())
+            return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
         metadata = {
             "arcgis_feature": feature,
             "arcgis_layer": layer,
@@ -349,6 +421,11 @@ class ArcGisPhotoMapAdapter:
             "external_source_url": source_reference,
             "time_taken_raw": self._first_attr(attrs, ("timeTaken",)),
             "folder_path": self._first_attr(attrs, ("FolderPath",)),
+            "media_attachments": list(attachments or []),
+            "sensitivity_flags": {
+                "gore": flagged("containsGore"),
+                "falling_person": flagged("containsFallingPerson"),
+            },
         }
         return SourceItem(
             id=f"{SOURCE_ID}:{source_item_id}",
@@ -382,13 +459,38 @@ class ArcGisPhotoMapAdapter:
                 pages = self.iter_feature_pages(str(layer["url"]), page_size=min(500, max(50, limit)))
                 for payload in pages:
                     spatial_reference = payload.get("spatialReference")
-                    for feature in payload["features"]:
+                    features = payload["features"]
+                    attachments_by_object: dict[str, list[dict[str, Any]]] = {}
+                    if self._layer_advertises_attachments(layer):
+                        object_ids = []
+                        for candidate in features:
+                            attrs = candidate.get("attributes") if isinstance(candidate, dict) else None
+                            if not isinstance(attrs, dict):
+                                continue
+                            object_id = self._first_attr(attrs, ("OBJECTID", "FID", "ObjectId"))
+                            if object_id is not None:
+                                object_ids.append(object_id)
+                        try:
+                            attachments_by_object = self.query_attachments(str(layer["url"]), object_ids)
+                        except ArcGisPhotoMapError:
+                            # Metadata collection should remain useful even if
+                            # a public attachment endpoint is temporarily down.
+                            attachments_by_object = {}
+
+                    for feature in features:
                         if len(records) >= limit:
                             break
                         if not isinstance(feature, dict) or not self._is_point_geometry(feature.get("geometry")):
                             continue
+                        attrs = feature.get("attributes") if isinstance(feature.get("attributes"), dict) else {}
+                        object_id = self._first_attr(attrs, ("OBJECTID", "FID", "ObjectId"))
                         try:
-                            record = self.normalize_feature(feature, layer=layer, spatial_reference=spatial_reference)
+                            record = self.normalize_feature(
+                                feature,
+                                layer=layer,
+                                spatial_reference=spatial_reference,
+                                attachments=attachments_by_object.get(str(object_id), []),
+                            )
                         except ArcGisPhotoMapError:
                             continue
                         if record.id in seen_ids:
