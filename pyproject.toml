@@ -5,6 +5,7 @@ description = "Research pipeline and API skeleton for a provenance-first Septemb
 requires-python = ">=3.11"
 dependencies = [
   "PyYAML>=6.0",
+  "py7zr>=0.22",
   "tzdata>=2024.1; platform_system == 'Windows'",
 ]
 

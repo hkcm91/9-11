@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import io
 import json
+import shutil
+import tempfile
+import zipfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator, TextIO
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -86,11 +91,12 @@ def discover_archive_csv_url(archive_item: str, *, timeout: float = 30.0) -> str
         )
 
     candidates: list[tuple[int, str]] = []
+    accepted_suffixes = (".csv", ".csv.gz", ".csv.zip", ".csv.7z")
     for item in files:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "").strip()
-        if not name.lower().endswith(".csv"):
+        if not name.lower().endswith(accepted_suffixes):
             continue
         try:
             size = int(item.get("size") or 0)
@@ -99,7 +105,16 @@ def discover_archive_csv_url(archive_item: str, *, timeout: float = 30.0) -> str
         candidates.append((size, name))
 
     if not candidates:
-        raise BulkSourceError(f"no CSV file found in Internet Archive item {archive_item}")
+        visible = [
+            str(item.get("name") or "").strip()
+            for item in files
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+        ]
+        preview = ", ".join(visible[:20])
+        raise BulkSourceError(
+            f"no CSV or compressed CSV payload found in Internet Archive item "
+            f"{archive_item}; files={preview}"
+        )
 
     _, name = max(candidates, key=lambda row: row[0])
     return f"https://archive.org/download/{archive_item}/{quote(name)}"
@@ -111,6 +126,127 @@ def discover_cablegate_csv_url(*, timeout: float = 30.0) -> str:
 
 def discover_war_diary_csv_url(*, timeout: float = 30.0) -> str:
     return discover_archive_csv_url(WAR_DIARY_ARCHIVE_ITEM, timeout=timeout)
+
+
+@contextmanager
+def _remote_csv_text_stream(
+    url: str,
+    *,
+    timeout: float,
+) -> Iterator[TextIO]:
+    """Open plain or compressed remote CSV content as a text stream."""
+
+    lower = url.lower()
+
+    if lower.endswith(".csv"):
+        response = _open(url, timeout=timeout)
+        try:
+            stream = io.TextIOWrapper(
+                response,
+                encoding="utf-8-sig",
+                errors="replace",
+                newline="",
+            )
+            yield stream
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+        return
+
+    if lower.endswith(".csv.gz"):
+        response = _open(url, timeout=timeout)
+        try:
+            gz = gzip.GzipFile(fileobj=response)
+            stream = io.TextIOWrapper(
+                gz,
+                encoding="utf-8-sig",
+                errors="replace",
+                newline="",
+            )
+            yield stream
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+        return
+
+    with tempfile.TemporaryDirectory(prefix="wikileaks-archive-") as temp_dir:
+        temp_root = Path(temp_dir)
+        archive_path = temp_root / Path(url).name
+
+        try:
+            response = _open(url, timeout=timeout)
+            with archive_path.open("wb") as handle:
+                shutil.copyfileobj(response, handle, length=1024 * 1024)
+        except Exception as exc:
+            raise BulkSourceError(f"could not download compressed bulk source {url}: {exc}") from exc
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+        extracted_csv: Path | None = None
+
+        if lower.endswith(".csv.zip"):
+            try:
+                with zipfile.ZipFile(archive_path) as archive:
+                    csv_members = [
+                        info
+                        for info in archive.infolist()
+                        if not info.is_dir() and info.filename.lower().endswith(".csv")
+                    ]
+                    if not csv_members:
+                        raise BulkSourceError(f"ZIP contained no CSV file: {url}")
+                    member = max(csv_members, key=lambda info: info.file_size)
+                    archive.extract(member, path=temp_root)
+                    extracted_csv = temp_root / member.filename
+            except BulkSourceError:
+                raise
+            except Exception as exc:
+                raise BulkSourceError(f"could not extract ZIP bulk source {url}: {exc}") from exc
+
+        elif lower.endswith(".csv.7z"):
+            try:
+                import py7zr
+            except ImportError as exc:
+                raise BulkSourceError(
+                    "reading .7z WikiLeaks archives requires the py7zr package"
+                ) from exc
+
+            try:
+                with py7zr.SevenZipFile(archive_path, mode="r") as archive:
+                    names = [
+                        name
+                        for name in archive.getnames()
+                        if name.lower().endswith(".csv")
+                    ]
+                    if not names:
+                        raise BulkSourceError(f"7z archive contained no CSV file: {url}")
+                    target = names[0]
+                    archive.extract(path=temp_root, targets=[target])
+                    extracted_csv = temp_root / target
+            except BulkSourceError:
+                raise
+            except Exception as exc:
+                raise BulkSourceError(f"could not extract 7z bulk source {url}: {exc}") from exc
+
+        else:
+            raise BulkSourceError(f"unsupported compressed CSV source: {url}")
+
+        if extracted_csv is None or not extracted_csv.exists():
+            raise BulkSourceError(f"CSV extraction produced no file: {url}")
+
+        with extracted_csv.open(
+            "r",
+            encoding="utf-8-sig",
+            errors="replace",
+            newline="",
+        ) as stream:
+            yield stream
 
 
 def stream_csv_sample(
@@ -133,44 +269,34 @@ def stream_csv_sample(
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        response = _open(url, timeout=timeout)
-    except Exception as exc:
-        raise BulkSourceError(f"could not open bulk source {url}: {exc}") from exc
-
     count = 0
     resolved_fields: list[str] = []
-    try:
-        text_stream = io.TextIOWrapper(
-            response,
-            encoding="utf-8-sig",
-            errors="replace",
-            newline="",
-        )
-        reader = csv.DictReader(text_stream, fieldnames=fieldnames)
-        resolved_fields = list(reader.fieldnames or [])
-        if not resolved_fields:
-            raise BulkSourceError(f"bulk source had no usable CSV schema: {url}")
 
-        with output.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(
-                handle,
-                fieldnames=resolved_fields,
-                extrasaction="ignore",
-            )
-            writer.writeheader()
-            for row in reader:
-                if not any(str(value or "").strip() for value in row.values()):
-                    continue
-                writer.writerow(dict(row))
-                count += 1
-                if count >= limit:
-                    break
-    finally:
-        try:
-            response.close()
-        except Exception:
-            pass
+    try:
+        with _remote_csv_text_stream(url, timeout=timeout) as text_stream:
+            reader = csv.DictReader(text_stream, fieldnames=fieldnames)
+            resolved_fields = list(reader.fieldnames or [])
+            if not resolved_fields:
+                raise BulkSourceError(f"bulk source had no usable CSV schema: {url}")
+
+            with output.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=resolved_fields,
+                    extrasaction="ignore",
+                )
+                writer.writeheader()
+                for row in reader:
+                    if not any(str(value or "").strip() for value in row.values()):
+                        continue
+                    writer.writerow(dict(row))
+                    count += 1
+                    if count >= limit:
+                        break
+    except BulkSourceError:
+        raise
+    except Exception as exc:
+        raise BulkSourceError(f"could not sample bulk source {url}: {exc}") from exc
 
     if count == 0:
         raise BulkSourceError(f"bulk source returned zero CSV records: {url}")
