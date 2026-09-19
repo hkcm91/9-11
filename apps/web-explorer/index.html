@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>September 11 Historical Explorer — MVP</title>
+  <meta name="description" content="Provenance-first map and timeline prototype for the September 11 historical archive.">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Historical Evidence Engine</p>
+      <h1>September 11 Explorer</h1>
+    </div>
+    <div class="status" id="status">Loading evidence read model…</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" aria-label="Timeline and filters">
+      <section class="panel timeline-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Historical time</p>
+            <h2 id="clock">—</h2>
+          </div>
+          <button type="button" id="reset-time" class="quiet-button">Reset</button>
+        </div>
+        <input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Historical timeline">
+        <div class="timeline-labels">
+          <span id="time-start">—</span>
+          <span id="time-end">—</span>
+        </div>
+        <label class="field">
+          <span>Visible time window</span>
+          <select id="window-size">
+            <option value="2">± 2 minutes</option>
+            <option value="5" selected>± 5 minutes</option>
+            <option value="15">± 15 minutes</option>
+            <option value="30">± 30 minutes</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="panel filters">
+        <p class="eyebrow">Filter evidence</p>
+        <label class="field">
+          <span>Media type</span>
+          <select id="media-filter">
+            <option value="all">All media</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Minimum confidence <strong id="confidence-value">0%</strong></span>
+          <input id="confidence-filter" type="range" min="0" max="100" value="0" step="5">
+        </label>
+        <label class="toggle">
+          <input id="untimed-toggle" type="checkbox" checked>
+          <span>Show mapped items without timeline time</span>
+        </label>
+      </section>
+
+      <section class="panel summary-panel">
+        <p class="eyebrow">Current view</p>
+        <div class="stat-grid">
+          <div><strong id="visible-count">0</strong><span>records</span></div>
+          <div><strong id="mapped-count">0</strong><span>mapped</span></div>
+          <div><strong id="source-count">0</strong><span>sources</span></div>
+          <div><strong id="verified-count">0</strong><span>verified claims</span></div>
+        </div>
+      </section>
+
+      <section class="panel legend-panel">
+        <p class="eyebrow">Claim status</p>
+        <div class="legend-row"><span class="legend-dot proposed"></span> Proposed</div>
+        <div class="legend-row"><span class="legend-dot reviewed"></span> Reviewed</div>
+        <div class="legend-row"><span class="legend-dot verified"></span> Verified</div>
+        <div class="legend-row"><span class="legend-dot disputed"></span> Disputed</div>
+        <p class="fine-print">A marker is evidence with a claim status, not an assertion that the archive has independently verified it.</p>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="map" aria-label="Lower Manhattan evidence map"></div>
+      <div class="record-tray">
+        <div class="tray-heading">
+          <div>
+            <p class="eyebrow">Visible evidence</p>
+            <h2>Records near this moment</h2>
+          </div>
+          <input id="search" type="search" placeholder="Search title, creator, source…" aria-label="Search visible evidence">
+        </div>
+        <div id="record-list" class="record-list" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <aside id="detail" class="detail-panel" aria-label="Record details">
+      <div class="detail-empty">
+        <p class="eyebrow">Evidence record</p>
+        <h2>Select a marker or record</h2>
+        <p>Claim confidence, method, source attribution, and rights notes remain visible here so uncertainty is never hidden by the interface.</p>
+      </div>
+    </aside>
+  </main>
+
+  <template id="record-card-template">
+    <button type="button" class="record-card">
+      <span class="record-card-time"></span>
+      <strong class="record-card-title"></strong>
+      <span class="record-card-meta"></span>
+      <span class="record-card-claim"></span>
+    </button>
+  </template>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
