@@ -9,8 +9,53 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 CABLEGATE_ARCHIVE_ITEM = "wikileaks-cables-csv"
-CABLEGATE_METADATA_URL = f"https://archive.org/metadata/{CABLEGATE_ARCHIVE_ITEM}"
-WAR_DIARIES_SAMPLE_URL = "https://raw.githubusercontent.com/FreGeh/iraq-war-logs/main/iraq1.csv"
+WAR_DIARY_ARCHIVE_ITEM = "WikileaksWarDiaryCsv"
+
+CABLEGATE_FIELDS = [
+    "row_id",
+    "date",
+    "reference",
+    "origin",
+    "classification",
+    "references_to",
+    "routing_header",
+    "body",
+]
+
+WAR_DIARY_FIELDS = [
+    "ReportKey",
+    "DateOccurred",
+    "Type",
+    "Category",
+    "TrackingNumber",
+    "Title",
+    "Summary",
+    "Region",
+    "AttackOn",
+    "ComplexAttack",
+    "ReportingUnit",
+    "UnitName",
+    "TypeOfUnit",
+    "FriendlyWIA",
+    "FriendlyKIA",
+    "HostNationWIA",
+    "HostNationKIA",
+    "CivilianWIA",
+    "CivilianKIA",
+    "EnemyWIA",
+    "EnemyKIA",
+    "EnemyDetained",
+    "MGRS",
+    "Latitude",
+    "Longitude",
+    "OriginatorGroup",
+    "UpdatedByGroup",
+    "CCIR",
+    "Sigact",
+    "Affiliation",
+    "DColor",
+    "Classification",
+]
 
 USER_AGENT = "historical-evidence-engine/0.1 (+https://github.com/hkcm91/9-11)"
 
@@ -24,18 +69,21 @@ def _open(url: str, *, timeout: float = 30.0):
     return urlopen(request, timeout=timeout)
 
 
-def discover_cablegate_csv_url(*, timeout: float = 30.0) -> str:
-    """Resolve a CSV payload from the Internet Archive Cablegate item at runtime."""
-
+def discover_archive_csv_url(archive_item: str, *, timeout: float = 30.0) -> str:
+    metadata_url = f"https://archive.org/metadata/{archive_item}"
     try:
-        with _open(CABLEGATE_METADATA_URL, timeout=timeout) as response:
+        with _open(metadata_url, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
-        raise BulkSourceError(f"could not read Cablegate Internet Archive metadata: {exc}") from exc
+        raise BulkSourceError(
+            f"could not read Internet Archive metadata for {archive_item}: {exc}"
+        ) from exc
 
     files = payload.get("files") if isinstance(payload, dict) else None
     if not isinstance(files, list):
-        raise BulkSourceError("Cablegate Internet Archive metadata did not contain files")
+        raise BulkSourceError(
+            f"Internet Archive metadata for {archive_item} did not contain files"
+        )
 
     candidates: list[tuple[int, str]] = []
     for item in files:
@@ -51,12 +99,18 @@ def discover_cablegate_csv_url(*, timeout: float = 30.0) -> str:
         candidates.append((size, name))
 
     if not candidates:
-        raise BulkSourceError("no CSV file found in the Cablegate Internet Archive item")
+        raise BulkSourceError(f"no CSV file found in Internet Archive item {archive_item}")
 
-    # Prefer the largest CSV because derived/checksum CSVs, when present, are
-    # usually much smaller than the actual cable export.
     _, name = max(candidates, key=lambda row: row[0])
-    return f"https://archive.org/download/{CABLEGATE_ARCHIVE_ITEM}/{quote(name)}"
+    return f"https://archive.org/download/{archive_item}/{quote(name)}"
+
+
+def discover_cablegate_csv_url(*, timeout: float = 30.0) -> str:
+    return discover_archive_csv_url(CABLEGATE_ARCHIVE_ITEM, timeout=timeout)
+
+
+def discover_war_diary_csv_url(*, timeout: float = 30.0) -> str:
+    return discover_archive_csv_url(WAR_DIARY_ARCHIVE_ITEM, timeout=timeout)
 
 
 def stream_csv_sample(
@@ -65,8 +119,13 @@ def stream_csv_sample(
     *,
     limit: int = 100,
     timeout: float = 60.0,
+    fieldnames: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Read only the first N CSV records from a remote source and write a local sample."""
+    """Read only the first N CSV records and write a normalized local sample.
+
+    If fieldnames are supplied, the remote CSV is treated as headerless. This
+    is required for the historical Cablegate and Afghan War Diary dumps.
+    """
 
     if limit < 1:
         raise ValueError("limit must be >= 1")
@@ -80,19 +139,29 @@ def stream_csv_sample(
         raise BulkSourceError(f"could not open bulk source {url}: {exc}") from exc
 
     count = 0
-    fieldnames: list[str] | None = None
+    resolved_fields: list[str] = []
     try:
-        # newline="" is important for CSV fields containing embedded newlines.
-        text_stream = io.TextIOWrapper(response, encoding="utf-8-sig", errors="replace", newline="")
-        reader = csv.DictReader(text_stream)
-        fieldnames = list(reader.fieldnames or [])
-        if not fieldnames:
-            raise BulkSourceError(f"bulk source had no CSV header: {url}")
+        text_stream = io.TextIOWrapper(
+            response,
+            encoding="utf-8-sig",
+            errors="replace",
+            newline="",
+        )
+        reader = csv.DictReader(text_stream, fieldnames=fieldnames)
+        resolved_fields = list(reader.fieldnames or [])
+        if not resolved_fields:
+            raise BulkSourceError(f"bulk source had no usable CSV schema: {url}")
 
         with output.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=resolved_fields,
+                extrasaction="ignore",
+            )
             writer.writeheader()
             for row in reader:
+                if not any(str(value or "").strip() for value in row.values()):
+                    continue
                 writer.writerow(dict(row))
                 count += 1
                 if count >= limit:
@@ -110,7 +179,8 @@ def stream_csv_sample(
         "url": url,
         "output": str(output),
         "records": count,
-        "columns": fieldnames,
+        "columns": resolved_fields,
+        "remote_headerless": fieldnames is not None,
     }
 
 
@@ -120,28 +190,27 @@ def fetch_default_real_samples(
     limit: int = 100,
     timeout: float = 60.0,
 ) -> dict[str, dict[str, Any]]:
-    """Fetch bounded real-data samples from stable public mirrors.
-
-    Cablegate remains canonically attributed to WikiLeaks; the Internet Archive
-    copy is used here as a transport mirror. War Diaries uses a public parsed CSV
-    mirror for validation only. Source URLs are returned for provenance.
-    """
+    """Fetch bounded real samples from full-schema public archive mirrors."""
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cablegate_url = discover_cablegate_csv_url(timeout=timeout)
+    war_diary_url = discover_war_diary_csv_url(timeout=timeout)
+
     plusd = stream_csv_sample(
         cablegate_url,
         output_dir / "plusd.csv",
         limit=limit,
         timeout=timeout,
+        fieldnames=CABLEGATE_FIELDS,
     )
     war = stream_csv_sample(
-        WAR_DIARIES_SAMPLE_URL,
+        war_diary_url,
         output_dir / "war-diaries.csv",
         limit=limit,
         timeout=timeout,
+        fieldnames=WAR_DIARY_FIELDS,
     )
 
     return {
@@ -153,7 +222,8 @@ def fetch_default_real_samples(
         },
         "war_diaries": {
             **war,
-            "canonical_source": "WikiLeaks Iraq War Logs",
-            "transport_mirror": "FreGeh/iraq-war-logs GitHub mirror",
+            "canonical_source": "WikiLeaks Afghan War Diary, 2004-2010",
+            "transport_mirror": "Internet Archive",
+            "archive_item": WAR_DIARY_ARCHIVE_ITEM,
         },
     }
