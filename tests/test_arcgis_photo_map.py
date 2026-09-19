@@ -240,3 +240,17 @@ def test_sample_reads_across_multiple_feature_pages(monkeypatch) -> None:
 
     assert [record.creator_raw for record in records] == ["A", "B", "C"]
     assert len({record.id for record in records}) == 3
+
+
+def test_large_sample_bounds_feature_and_attachment_request_size(monkeypatch):
+    adapter = ArcGisPhotoMapAdapter(request_delay_s=0)
+    monkeypatch.setattr(adapter, "discover_feature_layers", lambda: [
+        {"web_map_id": "test", "url": "https://example.test/FeatureServer/0"}
+    ])
+
+    def pages(url, *, page_size):
+        assert page_size <= 250
+        yield {"features": [{"attributes": {"OBJECTID": 1}, "geometry": {"x": -74, "y": 40.7}}]}
+
+    monkeypatch.setattr(adapter, "iter_feature_pages", pages)
+    assert len(adapter.sample(limit=1000)) == 1

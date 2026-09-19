@@ -456,7 +456,9 @@ class ArcGisPhotoMapAdapter:
             if len(records) >= limit:
                 break
             try:
-                pages = self.iter_feature_pages(str(layer["url"]), page_size=min(500, max(50, limit)))
+                # Larger ID lists exceed the hosted service's GET URL limit.
+                # Keep both feature and attachment requests small at scale.
+                pages = self.iter_feature_pages(str(layer["url"]), page_size=min(250, max(50, limit)))
                 for payload in pages:
                     spatial_reference = payload.get("spatialReference")
                     features = payload["features"]
