@@ -35,6 +35,10 @@ on:
         description: NIST organized photo/video asset records
         required: false
         default: "250"
+      jev_timing_limit:
+        description: "Jev timing support reviews (0 disables; maximum 500)"
+        required: false
+        default: "0"
 
 concurrency:
   group: phase0-scale
@@ -93,6 +97,18 @@ jobs:
             --entities artifacts/reports/entity-claims.jsonl \
             --stats-output artifacts/reports/store-stats.json
 
+      - name: Review media timing support with Jev
+        if: github.event_name == 'workflow_dispatch' && inputs.jev_timing_limit != '0' && inputs.jev_timing_limit != ''
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          TYPESAFE_API_URL: ${{ vars.TYPESAFE_API_URL }}
+          TYPESAFE_MODEL: ${{ vars.TYPESAFE_MODEL }}
+          JEV_TIMING_LIMIT: ${{ inputs.jev_timing_limit }}
+        run: |
+          python -m evidence_collections.september11.media_timing \
+            --database artifacts/archive.sqlite --output artifacts/reports \
+            --limit "$JEV_TIMING_LIMIT"
+
       - name: Build static Explorer MVP artifact
         run: |
           mkdir -p artifacts/explorer/data
@@ -104,6 +120,7 @@ jobs:
           cp apps/web-explorer/index.html artifacts/explorer/
           cp apps/web-explorer/styles.css artifacts/explorer/
           cp apps/web-explorer/app.js artifacts/explorer/
+          cp apps/web-explorer/*.mjs artifacts/explorer/
 
       - name: Write scale summary and manifest
         run: |
@@ -111,6 +128,7 @@ jobs:
           import hashlib, json
           from collections import Counter
           from pathlib import Path
+          from archive.store import ArchiveStore
 
           def read_jsonl(path):
               p = Path(path)
@@ -120,6 +138,9 @@ jobs:
 
           profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
           store_stats = json.loads(Path("artifacts/reports/store-stats.json").read_text(encoding="utf-8"))
+          with ArchiveStore("artifacts/archive.sqlite") as store:
+              store_stats["table_counts"] = store.stats()
+          Path("artifacts/reports/store-stats.json").write_text(json.dumps(store_stats, indent=2) + "\n", encoding="utf-8")
           temporal = read_jsonl("artifacts/reports/temporal-claims.jsonl")
           spatial = read_jsonl("artifacts/reports/spatial-claims.jsonl")
           entities = read_jsonl("artifacts/reports/entity-claims.jsonl")
@@ -163,6 +184,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: phase0-scale-corpus
           path: artifacts/
