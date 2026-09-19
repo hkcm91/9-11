@@ -87,6 +87,41 @@ jobs:
           archive-ingest --collection wikileaks build-graph artifacts/raw/*.jsonl \
             --database artifacts/wikileaks.sqlite \
             --stats-output artifacts/reports/graph-stats.json
+          archive-ingest --collection wikileaks analyze-graph-quality \
+            --database artifacts/wikileaks.sqlite \
+            --json-output artifacts/reports/graph-quality.json \
+            --markdown-output artifacts/reports/graph-quality.md \
+            --high-degree-threshold 20
+
+      - name: Validate requested real-batch coverage
+        env:
+          PLUSD_URL: ${{ inputs.plusd_url }}
+          WAR_URL: ${{ inputs.war_diaries_url }}
+          LIMIT: ${{ inputs.sample_limit }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
+          counts = profile.get("source_counts") or {}
+          required = int(os.environ["LIMIT"])
+          failures = []
+
+          if os.environ.get("PLUSD_URL"):
+              actual = int(counts.get("wikileaks-plusd", 0))
+              if actual < required:
+                  failures.append(f"Cablegate requested {required}, imported {actual}")
+
+          if os.environ.get("WAR_URL"):
+              actual = int(counts.get("wikileaks-war-diaries", 0))
+              if actual < required:
+                  failures.append(f"War Diaries requested {required}, imported {actual}")
+
+          if failures:
+              raise SystemExit("; ".join(failures))
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
