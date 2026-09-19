@@ -4,6 +4,12 @@ Boundary, stated once: AI assists with organisation and inference. It proposes.
 A human reviews. Nothing in this package can mark anything verified.
 """
 
+from historical_engine.ai.batch import (
+    load_decision_requests,
+    request_from_dict,
+    run_decision_batch,
+    write_decision_batch,
+)
 from historical_engine.ai.fakes import (
     FakeDecisionProvider,
     FakeEmbeddingProvider,
@@ -51,6 +57,9 @@ __all__ = [
     "GenerativeProvider",
     "JevDecisionProvider",
     "JevTransport",
+    "load_decision_requests",
+    "request_from_dict",
+    "run_decision_batch",
     "PROPOSAL_TYPE_FOR_QUESTION",
     "ProviderRegistry",
     "TranscriptionProvider",
@@ -58,4 +67,5 @@ __all__ = [
     "proposal_from_decision",
     "run_decision",
     "validate_decision",
+    "write_decision_batch",
 ]
