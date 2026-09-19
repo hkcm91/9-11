@@ -78,6 +78,7 @@ jobs:
           cp apps/web-explorer/styles.css _site/
           cp apps/web-explorer/app.js _site/
           cp apps/web-explorer/scene.mjs _site/
+          cp apps/web-explorer/evidence-time.mjs _site/
           cp /tmp/phase0-scale/explorer/data/explorer.json _site/data/
           touch _site/.nojekyll
 
@@ -87,6 +88,21 @@ jobs:
             exit 1
           fi
           echo "Publishing $RECORDS Explorer records."
+
+      - name: Version Explorer assets to avoid stale browser code
+        run: |
+          export ASSET_VERSION="$(git rev-parse HEAD)"
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          for name in ("index.html", "app.js"):
+              path = Path("_site") / name
+              text = path.read_text()
+              text = re.sub(r'(\./[\w-]+\.(?:js|mjs|css))(?:\?v=[\w-]+)?',
+                            lambda match: match[1] + "?v=" + os.environ["ASSET_VERSION"], text)
+              path.write_text(text)
+          PY
 
       - name: Upload Explorer Pages artifact
         uses: actions/upload-pages-artifact@v5

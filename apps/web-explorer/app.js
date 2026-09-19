@@ -2,6 +2,8 @@ import * as maplibregl from "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-
 
 import { getSceneState, SCENE_LAYERS, updateSceneSources } from "./scene.mjs";
 
+import { timeBounds, matchesHistoricalTime, summarizeTimes } from "./evidence-time.mjs";
+
 const DATA_URL = "./data/explorer.json";
 
 const EVENT_ANCHORS = [
@@ -539,19 +541,6 @@ function configureMediaTypes() {
   }
 }
 
-function itemMatchesTime(item, current, windowMinutes) {
-  if (!item.time) return untimedEl.checked && Boolean(item.location);
-  const start = parseTime(item.time.start_time);
-  const end = parseTime(item.time.end_time);
-  const windowStart = new Date(current.getTime() - windowMinutes * 60000);
-  const windowEnd = new Date(current.getTime() + windowMinutes * 60000);
-
-  if (start && start > windowEnd) return false;
-  if (end && end < windowStart) return false;
-  if (!start && !end) return false;
-  return true;
-}
-
 function applyFilters() {
   if (!state.payload) return;
 
@@ -562,7 +551,7 @@ function applyFilters() {
   const search = searchEl.value.trim().toLowerCase();
 
   state.visible = state.items.filter((item) => {
-    if (!itemMatchesTime(item, current, windowMinutes)) return false;
+    if (!matchesHistoricalTime(item, current, windowMinutes, untimedEl.checked)) return false;
     if (mediaType !== "all" && item.media_type !== mediaType) return false;
 
     const confidence = Math.max(item.time?.confidence || 0, item.location?.confidence || 0);
@@ -585,8 +574,16 @@ function applyFilters() {
   renderEvidenceStrip();
   renderStats();
   updateClock();
-  el("moment-summary").textContent = `${state.visible.length.toLocaleString()} records near this moment`;
-  el("map-window-label").textContent = `Evidence within ± ${windowMinutes} minutes`;
+  const { timed, untimed } = summarizeTimes(state.visible);
+  el("moment-summary").textContent = `${timed.toLocaleString()} timed records near this moment${untimed ? ` · ${untimed.toLocaleString()} untimed (not matched to clock)` : ""}`;
+  el("map-window-label").textContent = `Timed evidence within ± ${windowMinutes} minutes${untimed ? " · untimed records also shown" : ""}`;
+}
+
+function evidenceTimeLabel(item) {
+  const bounds = timeBounds(item);
+  if (!bounds) return "Capture time unknown · not matched to clock";
+  return bounds.start === bounds.end ? fmtTime(new Date(bounds.start))
+    : `${fmtShort(new Date(bounds.start))}–${fmtShort(new Date(bounds.end))} (time range)`;
 }
 
 function renderMarkers() {
@@ -631,7 +628,7 @@ function renderMarkers() {
       "<strong>" + escapeHtml(item.title || "Untitled record") + "</strong><span>" +
       escapeHtml(symbol) + " " +
       escapeHtml(item.media_type || "record") + " · " +
-      escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time)) +
+      escapeHtml(evidenceTimeLabel(item)) +
       "</span></div>"
     );
 
@@ -709,7 +706,7 @@ function renderEvidenceStrip() {
     if (item.id === state.selectedId) node.classList.add("selected");
 
     node.querySelector(".evidence-card-symbol").textContent = mediaSymbol(item.media_type);
-    node.querySelector(".evidence-card-time").textContent = fmtTime(item.time?.start_time || item.time?.end_time);
+    node.querySelector(".evidence-card-time").textContent = evidenceTimeLabel(item);
     node.querySelector(".evidence-card-title").textContent = item.title || "Untitled record";
     node.querySelector(".evidence-card-meta").textContent =
       [item.creator, item.media_type, item.source_id].filter(Boolean).join(" · ");
@@ -819,7 +816,7 @@ function selectItem(id, focusMap) {
       <div class="detail-summary-grid">
         <div class="detail-summary-card">
           <span>When</span>
-          <strong>${escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time))}</strong>
+          <strong>${escapeHtml(evidenceTimeLabel(item))}</strong>
         </div>
         <div class="detail-summary-card">
           <span>Where</span>
@@ -925,7 +922,7 @@ function wireControls() {
     mediaFilterEl.value = "all";
     confidenceEl.value = "0";
     confidenceValueEl.textContent = "0%";
-    untimedEl.checked = true;
+    untimedEl.checked = false;
     searchEl.value = "";
     state.selectedId = null;
     detailEl.classList.remove("open");
