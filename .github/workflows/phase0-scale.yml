@@ -6,6 +6,7 @@ on:
     paths:
       - "src/archive/explorer_export.py"
       - "src/archive/adapters/arcgis_photo_map.py"
+      - "src/archive/adapters/internet_archive.py"
       - "apps/web-explorer/**"
       - "pyproject.toml"
       - ".github/workflows/phase0-scale.yml"
@@ -14,7 +15,9 @@ on:
       - "src/archive/explorer_export.py"
       - "tests/test_explorer_export.py"
       - "tests/test_arcgis_photo_map.py"
+      - "tests/test_internet_archive_adapter.py"
       - "src/archive/adapters/arcgis_photo_map.py"
+      - "src/archive/adapters/internet_archive.py"
       - "apps/web-explorer/**"
       - "pyproject.toml"
       - ".github/workflows/phase0-scale.yml"
