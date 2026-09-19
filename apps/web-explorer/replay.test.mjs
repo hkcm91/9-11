@@ -95,17 +95,17 @@ test('flames respect each impact/collapse boundary, rewind, and static mode', ()
 
 
 import { approachTrack, aircraftMapData, aircraftCoordinate } from './replay.mjs';
-test('route guides match aircraft positions, clear after contact, and rewind',()=>{
+test('route guides persist while aircraft positions follow the clock and rewind',()=>{
   for(const tower of TOWERS) {
     const impact=Date.parse(tower.impact), track=approachTrack(tower);
     assert.equal(track.length,25);
     assert.deepEqual(aircraftCoordinate(tower,track[8]),aircraftCoordinate(tower,sampleAircraft(tower,impact-8000)));
     const data=aircraftMapData(impact-8000);
-    assert.equal(data.features.length,2);
-    assert.deepEqual(data.features.find(f=>f.properties.kind==='aircraft').geometry.coordinates,data.features[0].geometry.coordinates[8]);
-    assert.equal(aircraftMapData(impact).features.length,1);
-    assert.equal(aircraftMapData(impact+6000).features.length,0);
-    assert.equal(aircraftMapData(impact-12001).features.length,0);
+    assert.equal(data.features.length,3);
+    assert.deepEqual(data.features.find(f=>f.properties.kind==='aircraft').geometry.coordinates,data.features.find(f=>f.properties.kind==='route' && f.properties.tower===tower.id).geometry.coordinates[8]);
+    assert.equal(aircraftMapData(impact).features.length,2);
+    assert.equal(aircraftMapData(impact+6000).features.length,2);
+    assert.equal(aircraftMapData(impact-12001).features.length,2);
     assert.deepEqual(aircraftMapData(impact-8000),data);
   }
 });
