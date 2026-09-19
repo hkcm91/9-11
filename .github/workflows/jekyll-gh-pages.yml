@@ -77,6 +77,7 @@ jobs:
           cp apps/web-explorer/index.html _site/
           cp apps/web-explorer/styles.css _site/
           cp apps/web-explorer/app.js _site/
+          cp apps/web-explorer/scene.mjs _site/
           cp /tmp/phase0-scale/explorer/data/explorer.json _site/data/
           touch _site/.nojekyll
 
