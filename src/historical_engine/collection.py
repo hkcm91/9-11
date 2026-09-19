@@ -40,6 +40,8 @@ class CollectionHooks:
     derive_temporal: Callable[[SourceRecord], Iterable[Any]] | None = None
     derive_spatial: Callable[[SourceRecord], Iterable[Any]] | None = None
     derive_entities: Callable[[SourceRecord], Iterable[Any]] | None = None
+    #: Optional deterministic graph derivation: record -> Entity/Event/Relationship objects.
+    derive_graph: Callable[[SourceRecord], Iterable[Any]] | None = None
     #: True when a deterministic time claim already exists for this record, so
     #: the work queue should not raise a research task for it.
     has_deterministic_time: Callable[[SourceRecord], bool] | None = None
