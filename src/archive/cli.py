@@ -169,6 +169,14 @@ def build_parser() -> argparse.ArgumentParser:
     rights_queue.add_argument("inputs", nargs="+", type=Path)
     rights_queue.add_argument("--output", type=Path, required=True)
 
+    graph = subparsers.add_parser(
+        "build-graph",
+        help="Materialize a collection's deterministic evidence graph into SQLite",
+    )
+    graph.add_argument("inputs", nargs="+", type=Path)
+    graph.add_argument("--database", type=Path, required=True)
+    graph.add_argument("--stats-output", type=Path, default=None)
+
     demo = subparsers.add_parser(
         "run-demo-pipeline",
         help="Run the synthetic demo_history corpus end-to-end through the generic engine",
@@ -371,6 +379,22 @@ def main(argv: list[str] | None = None) -> int:
         tasks = build_rights_queue(records, collection=collection)
         _write_jsonl(args.output, tasks, asdict)
         print(f"wrote {len(tasks)} publication/rights-clearance tasks to {args.output}")
+        return 0
+
+    if args.command == "build-graph":
+        from historical_engine.graph_derivation import materialize_graph
+
+        records = _load_many(args.inputs)
+        args.database.parent.mkdir(parents=True, exist_ok=True)
+        with ArchiveStore(args.database) as store:
+            payload = materialize_graph(records, collection, store)
+            payload["database"] = str(args.database)
+            payload["table_counts"] = store.stats()
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if args.stats_output:
+            args.stats_output.parent.mkdir(parents=True, exist_ok=True)
+            args.stats_output.write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
         return 0
 
     if args.command == "run-demo-pipeline":
