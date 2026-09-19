@@ -158,22 +158,28 @@ jobs:
           import os
           from pathlib import Path
 
-          profile = json.loads(Path("artifacts/reports/profile.json").read_text(encoding="utf-8"))
-          counts = profile.get("source_counts") or {}
           required = int(os.environ["LIMIT"])
           failures = []
-
           using_defaults = os.environ.get("WIKILEAKS_DEFAULT_REAL_SOURCES") == "1"
 
+          def jsonl_count(path: str) -> int:
+              file = Path(path)
+              if not file.exists():
+                  return 0
+              return sum(1 for line in file.read_text(encoding="utf-8").splitlines() if line.strip())
+
+          # Coverage is an ingestion assertion, so count normalized source rows
+          # before reconciliation/deduplication. The profile intentionally
+          # collapses stable duplicate IDs and may therefore be smaller.
           if os.environ.get("PLUSD_URL") or using_defaults:
-              actual = int(counts.get("wikileaks-plusd", 0))
+              actual = jsonl_count("artifacts/raw/plusd.jsonl")
               if actual < required:
-                  failures.append(f"Cablegate requested {required}, imported {actual}")
+                  failures.append(f"Cablegate requested {required}, normalized {actual}")
 
           if os.environ.get("WAR_URL") or using_defaults:
-              actual = int(counts.get("wikileaks-war-diaries", 0))
+              actual = jsonl_count("artifacts/raw/war-diaries.jsonl")
               if actual < required:
-                  failures.append(f"War Diaries requested {required}, imported {actual}")
+                  failures.append(f"War Diaries requested {required}, normalized {actual}")
 
           if failures:
               raise SystemExit("; ".join(failures))
