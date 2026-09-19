@@ -3,6 +3,7 @@ from pathlib import Path
 
 from historical_engine.ai.batch import (
     load_decision_requests,
+    request_from_dict,
     run_decision_batch,
     write_decision_batch,
 )
@@ -108,7 +109,7 @@ def test_batch_runner_keeps_model_answers_as_proposals(tmp_path: Path) -> None:
 def test_batch_rejects_cross_collection_request() -> None:
     collection = get_collection("wikileaks")
     provider = FakeDecisionProvider()
-    request = load_decision_requests.__globals__["request_from_dict"](
+    request = request_from_dict(
         {
             "question": "same_entity",
             "subject_id": "entity:1",
