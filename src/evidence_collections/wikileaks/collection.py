@@ -12,6 +12,7 @@ from historical_engine.roles import RoleRule
 from historical_engine.routing import ConfidenceRouter, RoutingPolicy
 
 from evidence_collections.wikileaks import rules
+from evidence_collections.wikileaks.graph import derive_graph
 
 COLLECTION_ID = "wikileaks"
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -59,7 +60,10 @@ class WikiLeaksCollection(BaseCollection):
     source_values: dict[str, float] = field(default_factory=lambda: dict(rules.SOURCE_VALUE))
     router: ConfidenceRouter = field(default_factory=lambda: ROUTER)
     hooks: CollectionHooks = field(
-        default_factory=lambda: CollectionHooks(priority_reasons=rules.priority_reasons)
+        default_factory=lambda: CollectionHooks(
+            priority_reasons=rules.priority_reasons,
+            derive_graph=derive_graph,
+        )
     )
 
     def role_rules(self) -> Sequence[RoleRule]:

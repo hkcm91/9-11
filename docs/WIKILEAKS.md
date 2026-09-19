@@ -55,3 +55,53 @@ not automatically treat a reference as corroboration.
 This collection lives under `src/evidence_collections/wikileaks/` rather than
 inside the generic engine. The engine remains unaware of WikiLeaks-specific
 source IDs and event semantics.
+
+
+## First-pass evidence graph
+
+The collection now supplies the engine's generic `derive_graph` hook.
+
+For Cablegate records it deterministically proposes:
+
+- one document node for the cable
+- sender/origin organization nodes
+- destination organization nodes
+- referenced-cable document nodes
+- typed `sent_from`, `sent_to`, and `references_document` relationships
+
+For War Diaries records it proposes:
+
+- one document node representing the source record
+- one `sigact` event
+- the reporting military unit when available
+- region and raw MGRS place nodes
+- typed `describes`, `reported_by`, `located_in`, and `occurred_at` relationships
+
+Every derived object remains `proposed`, cites the source record, and carries a
+deterministic provenance method. The graph pass does not assert corroboration or
+established fact.
+
+Build the graph with:
+
+```bash
+archive-ingest --collection wikileaks build-graph artifacts/raw/*.jsonl \
+  --database artifacts/wikileaks.sqlite \
+  --stats-output artifacts/reports/graph-stats.json
+```
+
+## Real regression sample
+
+`src/evidence_collections/wikileaks/fixtures/real_sample.jsonl` contains two
+small records manually transcribed from the public archive for regression
+testing:
+
+- PlusD cable `09STATE122615_a`
+- War Diaries record `7893F7C5-E13B-4C3D-8B4A-75B93202ED14`
+
+The fixture intentionally contains only enough source metadata to exercise
+provenance, routing, event and relationship behavior; it is not intended to
+replace the original documents.
+
+Running the `wikileaks-sample` GitHub Action without dataset URLs uses this
+fixture automatically. Supplying public CSV URLs instead exercises up to the
+requested sample limit (100 by default).
