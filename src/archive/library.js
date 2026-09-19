@@ -6,6 +6,20 @@ let jevReady = false;
 let jevBusy = false;
 const comparisonPages = {left: null, right: null};
 
+function showView(view) {
+  if (!['archive', 'leads', 'jev'].includes(view)) view = 'archive';
+  document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
+  document.querySelectorAll('[data-view]').forEach(button => {
+    if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons'}[view];
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('[data-view]').forEach(button => {
+  button.onclick = () => { location.hash = 'view=' + button.dataset.view; };
+});
+
 function updateComparison() {
   for (const side of ['left', 'right']) {
     const page = comparisonPages[side];
@@ -77,6 +91,11 @@ function el(tag, text, cls) {
   return element;
 }
 
+function releaseLabel(row) {
+  return {'cablegate-ia-fulltext-v2': 'Cablegate', 'nara-2011': 'Pentagon Papers',
+    'war-diary-published-text': 'War Diaries'}[row.release_id] || row.release_id.replaceAll('-', ' ');
+}
+
 async function api(url) {
   const response = await fetch(url);
   if (!response.ok) throw Error(response.status === 404
@@ -119,10 +138,10 @@ async function search(reset = true) {
     if (generation !== searchGeneration) return;
     for (const row of rows) {
       const card = el('div', undefined, 'card');
-      card.append(el('div', row.collection.replaceAll('_', ' ') + ' / ' + row.release_id, 'eyebrow'));
+      card.append(el('div', releaseLabel(row), 'eyebrow'));
       const heading = el('h2');
       heading.append(link(row.title, '#doc=' + row.id + '&page=' + row.page));
-      card.append(heading, el('div', 'Page ' + row.page + ' · ' + row.extraction_status.replaceAll('_', ' '), 'meta'), highlighted(row.excerpt));
+      card.append(heading, el('div', 'Page ' + row.page + ' · ' + (row.extraction_status === 'indexed' ? 'Preserved text' : row.extraction_status.replaceAll('_', ' ')), 'meta'), highlighted(row.excerpt));
       $('results').append(card);
     }
     offset += rows.length;
@@ -140,7 +159,12 @@ function pageLink(id, number) {
 
 async function read() {
   const params = new URLSearchParams(location.hash.slice(1));
-  if (!params.has('doc')) return;
+  if (!params.has('doc')) {
+    ++readerGeneration;
+    showView(params.get('view') || 'archive');
+    return;
+  }
+  showView('archive');
   const generation = ++readerGeneration;
   const number = Number(params.get('page') || 1);
   const id = params.get('doc');
@@ -154,7 +178,7 @@ async function read() {
     ]);
     if (generation !== readerGeneration) return;
     box.replaceChildren(el('div', doc.collection.replaceAll('_', ' '), 'eyebrow'), el('h2', doc.title),
-      el('p', 'Release: ' + doc.release_id + ' · ' + doc.page_count + ' pages · Retrieved ' + doc.retrieved_at.slice(0, 10), 'meta'));
+      el('p', releaseLabel(doc) + ' · ' + doc.page_count + ' pages · Retrieved ' + doc.retrieved_at.slice(0, 10), 'meta'));
     const source = link('Original source', doc.source_url);
     if (doc.format === 'warlog_html') box.append(el('p', 'Published War Diary narrative. Redactions in the publisher’s text are preserved.', 'meta'));
     source.target = '_blank';
@@ -210,7 +234,7 @@ async function read() {
         comparisonPages[side] = {id, number, title: doc.title};
         $('jev-result').replaceChildren();
         updateComparison();
-        $('jev').scrollIntoView({block: 'start'});
+        location.hash = 'view=jev';
       };
       section.append(choose);
     }
@@ -242,7 +266,7 @@ async function coverage() {
     const total = published.reduce((sum, row) => sum + row.versions, 0);
     const pages = published.reduce((sum, row) => sum + row.pages, 0);
     const summary = el('p', total + ' published document versions · ' + pages.toLocaleString() + ' pages', 'coverage-total');
-    const rows = inventory.map(row => el('div', row.collection.replaceAll('_', ' ') + ': '
+    const rows = inventory.map(row => el('div', releaseLabel(row) + ': '
       + row.processed + ' / ' + row.discovered + ' source items imported'
       + ' · ' + row.published + ' published'
       + (row.processed > row.published ? ' · ' + (row.processed - row.published) + ' awaiting review' : '')
@@ -314,7 +338,9 @@ async function loadLeads() {
     $('leads-list').replaceChildren();
     if (!visible.length) $('leads-list').append(el('p', 'No leads in this view. Run a scan to find candidates in published text.'));
     for (const lead of visible) {
-      const card = el('article', undefined, 'card');
+      const shell = el('details', undefined, 'card');
+      shell.append(el('summary', lead.title));
+      const card = el('div', undefined, 'lead-content');
       card.append(el('div', lead.status + ' · 1 source · Unverified', 'eyebrow'), el('h3', lead.question),
         el('p', lead.title), el('p', lead.why_it_matters));
       for (const passage of lead.passages) {
@@ -358,7 +384,8 @@ async function loadLeads() {
       };
       card.append(review);
       for (const entry of lead.reviews) card.append(el('p', entry.status + ': ' + entry.note, 'meta'));
-      $('leads-list').append(card);
+      shell.append(card);
+      $('leads-list').append(shell);
     }
   } catch (error) { $('leads-status').textContent = error.message; }
 }
