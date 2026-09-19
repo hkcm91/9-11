@@ -157,3 +157,27 @@ def test_reading_brief_api_and_formatted_download(tmp_path):
             with pytest.raises(HTTPError) as exc:
                 urlopen(base + '/api/documents/' + identifier + '/' + endpoint)
             assert exc.value.code == 404
+
+
+def test_completion_inventory_verification_and_match_routes(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, identifier, base, _):
+        entry = dict(collection='wikileaks',release_id='test',source_item_id='one',
+            title='Source',format='text',source_url='https://example.org/one')
+        lib.register_inventory([entry])
+        lib.record_attempt(entry,dict(status='processed',document_id=identifier))
+        with urlopen(base+'/api/completion') as response:
+            assert json.load(response)[0]['counts']['downloaded']==1
+        with urlopen(base+'/api/completion/items?collection=wikileaks&release_id=test&stage=searchable') as response:
+            assert json.load(response)['total']==1
+        def post(action, origin=base):
+            values=dict(collection='wikileaks',release_id='test',source_item_id='one',candidate=identifier)
+            request=Request(base+'/api/completion/'+action,data=json.dumps(values).encode(),
+                headers={'Content-Type':'application/json','Origin':origin,'X-Archive-Request':'1'})
+            with urlopen(request) as response:
+                return json.load(response)
+        with pytest.raises(HTTPError) as exc:
+            post('match','https://other.example')
+        assert exc.value.code==403
+        assert post('verify')['checked']==1
+        assert post('match')['note'].startswith('Proposal only')

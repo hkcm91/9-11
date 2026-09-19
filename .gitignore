@@ -17,6 +17,9 @@ artifacts/cablegate-prefix.bin
 artifacts/cable-original.html
 artifacts/warlog-original.html
 artifacts/snowden-tree.json
+artifacts/snowden-commit.json
+artifacts/epstein-disclosures.html
+artifacts/epstein-dataset1.html
 examples/library/*.source.html
 
 # Local credentials / environment

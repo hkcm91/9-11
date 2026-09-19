@@ -1,0 +1,162 @@
+[
+  {
+    "collection": "snowden",
+    "release_id": "published-mirror-7d31c608baff",
+    "title": "Snowden \u2014 published-document mirror",
+    "inventory_status": "complete_catalog",
+    "expected_files": 474,
+    "catalog_url": "https://github.com/iamcryptoki/snowden-archive/tree/7d31c608baff3cdf72af8e24595327438f54cda0",
+    "snapshot_sha256": "e0c4ac617d93e66b0274c0102c4c44c8cd2cf021e6cdd8d387ce6309798c2805",
+    "captured_at": "2026-09-19T23:21:15.480987+00:00",
+    "scope_note": "Complete PDF list at pinned third-party repository commit 7d31c608baff3cdf72af8e24595327438f54cda0. Not the complete Snowden leak."
+  },
+  {
+    "collection": "pentagon_papers",
+    "release_id": "nara-2011",
+    "title": "Pentagon Papers \u2014 National Archives release",
+    "inventory_status": "complete_catalog",
+    "expected_files": 49,
+    "catalog_url": "https://www.archives.gov/research/pentagon-papers",
+    "scope_note": "49 PDFs in the National Archives catalog. OCR completeness tracked separately."
+  },
+  {
+    "collection": "wikileaks",
+    "release_id": "cablegate-ia-fulltext-v2",
+    "title": "Cablegate \u2014 bounded mirror sample",
+    "inventory_status": "bounded_sample",
+    "expected_files": null,
+    "scope_note": "1,000 sampled cables, not the complete release."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-1",
+    "title": "Epstein \u2014 DOJ data set 1",
+    "inventory_status": "partial_catalog",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-1-files",
+    "captured_at": "2026-09-19T23:21:15.516486+00:00",
+    "snapshot_sha256": "30036939027d82831960a04f56f3457fabf2efe97caf62225453f686d1e2e512",
+    "scope_note": "First catalog page captured; pagination remains outstanding. No files downloaded."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-2",
+    "title": "Epstein \u2014 DOJ data set 2",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-2-files",
+    "captured_at": "2026-09-19T23:21:15.516987+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-3",
+    "title": "Epstein \u2014 DOJ data set 3",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-3-files",
+    "captured_at": "2026-09-19T23:21:15.516987+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-4",
+    "title": "Epstein \u2014 DOJ data set 4",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-4-files",
+    "captured_at": "2026-09-19T23:21:15.517488+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-5",
+    "title": "Epstein \u2014 DOJ data set 5",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-5-files",
+    "captured_at": "2026-09-19T23:21:15.517488+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-6",
+    "title": "Epstein \u2014 DOJ data set 6",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-6-files",
+    "captured_at": "2026-09-19T23:21:15.517488+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-7",
+    "title": "Epstein \u2014 DOJ data set 7",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-7-files",
+    "captured_at": "2026-09-19T23:21:15.517987+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-8",
+    "title": "Epstein \u2014 DOJ data set 8",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-8-files",
+    "captured_at": "2026-09-19T23:21:15.517987+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-9",
+    "title": "Epstein \u2014 DOJ data set 9",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-9-files",
+    "captured_at": "2026-09-19T23:21:15.518487+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-10",
+    "title": "Epstein \u2014 DOJ data set 10",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-10-files",
+    "captured_at": "2026-09-19T23:21:15.518487+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-11",
+    "title": "Epstein \u2014 DOJ data set 11",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-11-files",
+    "captured_at": "2026-09-19T23:21:15.518487+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  },
+  {
+    "collection": "epstein",
+    "release_id": "doj-data-set-12",
+    "title": "Epstein \u2014 DOJ data set 12",
+    "inventory_status": "not_started",
+    "expected_files": null,
+    "catalog_url": "https://www.justice.gov/epstein/doj-disclosures/data-set-12-files",
+    "captured_at": "2026-09-19T23:21:15.518987+00:00",
+    "snapshot_sha256": "a5773c1b07c8f6ec0f49c746201747ef2c510f96f4929a837c82caf6f204bc89",
+    "scope_note": "Release listed in official DOJ index; file enumeration has not started."
+  }
+]

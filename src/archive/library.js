@@ -7,13 +7,13 @@ let jevBusy = false;
 const comparisonPages = {left: null, right: null};
 
 function showView(view) {
-  if (!['archive', 'leads', 'jev', 'research'].includes(view)) view = 'archive';
+  if (!['archive', 'leads', 'jev', 'research', 'completion'].includes(view)) view = 'archive';
   document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
   document.querySelectorAll('[data-view]').forEach(button => {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
-  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons', research: 'Jev investigator'}[view];
+  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons', research: 'Jev investigator', completion: 'Collection coverage'}[view];
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-view]').forEach(button => {
@@ -522,3 +522,96 @@ async function mountDigest(doc, box) {
   try { render(await api('/api/documents/' + doc.id + '/digest')); }
   catch { status.textContent = 'Saved brief could not be loaded. You can try creating it again.'; }
 }
+
+let completionReleases = [], completionOffset = 0, completionGeneration = 0, completionBusy = false;
+function currentRelease() { return completionReleases[Number($('completion-release').value)]; }
+async function loadCompletion(keep = false) {
+  const previous = currentRelease();
+  completionReleases = await api('/api/completion');
+  $('completion-release').replaceChildren();
+  completionReleases.forEach((row, index) => {
+    const option = el('option', row.title || row.release_id); option.value = index;
+    $('completion-release').append(option);
+  });
+  if (keep && previous) {
+    const index = completionReleases.findIndex(row => row.collection === previous.collection && row.release_id === previous.release_id);
+    if (index >= 0) $('completion-release').value = index;
+  }
+  await completionItems();
+}
+async function completionItems() {
+  const generation = ++completionGeneration;
+  const row = currentRelease(); if (!row) return;
+  const box = $('completion-summary');
+  box.replaceChildren(el('h2', row.title || row.release_id),
+    el('p', row.inventory_status.replaceAll('_', ' ') + ' · Expected files: ' + (row.expected_files ?? 'unknown')),
+    el('p', row.scope_note || '', 'meta'), el('p', row.complete ? 'Complete within this documented catalog scope.' : 'Incomplete or not fully verified.', 'warning'));
+  box.append(el('p', ['discovered','downloaded','extracted','reviewed','searchable','verified'].map(key => row.counts[key] + ' ' + key).join(' → ')));
+  box.append(el('p', row.counts.ocr_pages + ' pages need OCR · ' + row.counts.attention + ' items need attention'
+    + (row.unlisted_expected ? ' · ' + row.unlisted_expected + ' expected items not yet enumerated' : ''), 'meta'));
+  if (row.catalog_url) box.append(link('Source catalog', row.catalog_url));
+  if (row.snapshot_sha256) box.append(el('p', 'Catalog snapshot SHA-256: ' + row.snapshot_sha256, 'meta'));
+  const result = await api('/api/completion/items?' + new URLSearchParams({collection:row.collection,
+    release_id:row.release_id, stage:$('completion-stage').value, offset:completionOffset}));
+  if (generation !== completionGeneration) return;
+  $('completion-items').replaceChildren(); $('completion-expected').replaceChildren();
+  $('completion-count').textContent = result.total ? (completionOffset+1) + '–' + (completionOffset+result.items.length) + ' of ' + result.total : 'No files in this view';
+  $('completion-prev').disabled = completionOffset === 0;
+  $('completion-next').disabled = completionOffset + result.items.length >= result.total;
+  for (const item of result.items) {
+    const card = el('details', undefined, 'card');
+    card.append(el('summary', item.title + ' · ' + item.stage.replaceAll('_',' ')),
+      el('p', item.source_item_id, 'meta'), link('Catalog file link', item.source_url),
+      el('p', item.pages + ' pages · ' + item.ocr_pages + ' need OCR · Integrity: ' + item.integrity));
+    if (item.sha256) card.append(el('p', 'SHA-256: ' + item.sha256, 'meta'));
+    if (item.checked_at) card.append(el('p', 'Last integrity check: ' + item.checked_at, 'meta'));
+    if (item.reason) card.append(el('p', item.reason, 'warning'));
+    if (item.document_id) card.append(link('Read archived document', pageLink(item.document_id, 1)));
+    $('completion-items').append(card);
+    const option = el('option', item.title); option.value = item.source_item_id; $('completion-expected').append(option);
+  }
+}
+async function completionAction(path, extra = {}) {
+  if (completionBusy) return;
+  const row = currentRelease(); if (!row) return;
+  completionBusy = true; $('completion-verify').disabled = true;
+  $('completion-status').textContent = 'Working…';
+  try {
+    const response = await fetch('/api/completion/' + path, {method:'POST',
+      headers:{'Content-Type':'application/json','X-Archive-Request':'1'},
+      body:JSON.stringify({collection:row.collection,release_id:row.release_id,...extra})});
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error || 'Unable to complete action');
+    if (path === 'verify') {
+      $('completion-status').textContent = result.checked + ' files checked · ' + result.failed + ' failed.';
+      await loadCompletion(true);
+    } else {
+      $('completion-status').textContent = 'Source-match proposal saved. Inventory unchanged.';
+      $('completion-match-result').replaceChildren(el('h3', result.response.answer.replaceAll('_',' ')),
+        el('p', 'Expected: ' + result.expected.title), el('p', 'Candidate: ' + result.candidate.title),
+        el('p', result.response.rationale), el('p', result.note, 'meta'));
+      $('completion-match-result').append(link('Read candidate source', pageLink(result.candidate.document_id, 1)));
+    }
+  } catch (error) { $('completion-status').textContent = error.message; }
+  finally { completionBusy = false; $('completion-verify').disabled = false; }
+}
+function refreshCompletionItems() { completionItems().catch(error => { $('completion-status').textContent = error.message; }); }
+$('completion-release').onchange = () => { completionOffset = 0; $('completion-match-result').replaceChildren(); refreshCompletionItems(); };
+$('completion-stage').onchange = () => { completionOffset = 0; refreshCompletionItems(); };
+$('completion-prev').onclick = () => { completionOffset = Math.max(0, completionOffset-50); refreshCompletionItems(); };
+$('completion-next').onclick = () => { completionOffset += 50; refreshCompletionItems(); };
+$('completion-verify').onclick = () => completionAction('verify');
+$('completion-find').onsubmit = async event => {
+  event.preventDefault();
+  try {
+    const rows = await api('/api/search?' + new URLSearchParams({q:$('completion-query').value}));
+    $('completion-candidate').replaceChildren();
+    for (const row of rows) {
+      const option = el('option', row.display_title || row.title); option.value = row.id; $('completion-candidate').append(option);
+    }
+    if (!rows.length) $('completion-status').textContent = 'No published candidate found.';
+  } catch (error) { $('completion-status').textContent = error.message; }
+};
+$('completion-match').onsubmit = event => { event.preventDefault(); completionAction('match',
+  {source_item_id:$('completion-expected').value, candidate:$('completion-candidate').value}); };
+loadCompletion().catch(error => { $('completion-status').textContent = error.message; });

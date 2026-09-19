@@ -22,6 +22,17 @@ def file_digest(path: Path) -> str:
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
+def verify_catalog_identity(path, entry):
+    if entry.get('git_blob_sha1'):
+        size = path.stat().st_size
+        sha = hashlib.sha1(('blob ' + str(size) + '\0').encode())
+        with path.open('rb') as handle:
+            while chunk := handle.read(CHUNK):
+                sha.update(chunk)
+        if sha.hexdigest() != entry['git_blob_sha1'] or size != entry['advertised_bytes']:
+            raise ValueError('Downloaded file differs from pinned repository blob')
+
+
 class CatalogParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -183,6 +194,7 @@ def bulk_ingest(library, path: Path, *, max_file_bytes=600 * CHUNK,
             if cached and not refresh:
                 if file_digest(library.objects / cached["sha256"]) != cached["sha256"]:
                     raise ValueError("Preserved object failed integrity check")
+                verify_catalog_identity(library.objects / cached['sha256'], entry)
                 result.update(status="processed", document_id=cached["id"], resumed=True)
             else:
                 # Retry extraction from a completed download after a previous parse failure.
@@ -197,6 +209,7 @@ def bulk_ingest(library, path: Path, *, max_file_bytes=600 * CHUNK,
                     target, size = fetch_object(entry, path.parent, library.objects, min(max_file_bytes, max_total_bytes - transferred), account)
                     with library.db:
                         library.db.execute("INSERT OR REPLACE INTO library_downloads VALUES(?,?,?)", (encoded(metadata), target.name, now()))
+                verify_catalog_identity(target, entry)
                 identifier = library.ingest_preserved(entry, target)
                 result.update(status="processed", document_id=identifier, resumed=False)
         except DownloadLimit as exc:

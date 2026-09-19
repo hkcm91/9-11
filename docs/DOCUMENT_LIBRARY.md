@@ -134,7 +134,46 @@ redactions remain intact. This is the published narrative, not an unredacted
 military original. Other HTML layouts fail extraction rather than becoming empty
 documents. Original HTML is downloaded as an attachment, never embedded.
 
-## Readable titles and reading briefs
+## Collection completion
+
+**Collection coverage** shows catalog scope and per-item stages: pending,
+downloaded, awaiting review, searchable, failed, quarantined, or integrity problem.
+The stage is distinct from original presence, extraction, publication reviews,
+OCR gaps, and the last checksum check. A failed retry retains visibility of a
+previously stored version and its error. Checks verify up to 100 preserved objects
+per invocation, oldest checks first; results include check times.
+
+Only an explicitly complete catalog with an expected count matching the discovered
+inventory can become complete. All items must be reviewed, searchable and verified,
+with no remaining OCR pages or failed attempts. Samples and partial catalogs cannot
+become complete merely because their discovered files finished processing. Completion
+is relative to the recorded catalog snapshot, never all files that may exist.
+
+```sh
+archive-library completion-scopes examples/library/completion-scopes.json
+archive-library inventory examples/library/snowden-published-mirror.json
+archive-library inventory examples/library/epstein-doj-data-set-1.json
+archive-library completion
+archive-library completion --collection pentagon_papers --release-id nara-2011 --verify
+archive-library bulk-ingest examples/library/snowden-published-mirror.json --limit 12 --max-total-mib 80
+```
+
+The Snowden manifest pins a third-party repository commit and records Git blob
+identities and exact sizes; the importer verifies those identities before extraction.
+It inventories 474 PDFs, not the complete underlying Snowden cache. The Epstein
+manifest captures 50 PDF links on the first DOJ data-set-1 catalog page. Eleven
+additional DOJ data sets have unenumerated scopes. Pagination and source access
+remain outstanding; no missing count is invented. Catalog snapshot hashes and URLs
+are in the scope registry. Parser functions in `library_catalogs` accept downloaded
+tree/commit JSON or official catalog HTML, validate origins/identities, and fail on
+empty or truncated inventories. Discovery does not bypass source access controls.
+
+For ambiguous matches, select an expected item and search for a published candidate
+in the dashboard. Jev assesses supplied catalog metadata and the candidate's first
+6,000 characters, with a cached proposal and source citation. It does not assign
+inventory items, mark files present, change counts, or grant publication approval.
+
+## Reading briefs
 
 Search results and the reader display a source subject heading where one can be
 extracted reliably; the original identifier remains visible. Original downloads

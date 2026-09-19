@@ -30,7 +30,7 @@ def handler_for(database, objects, *, jev_factory=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path not in {"/api/compare", "/api/digest", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
+            if self.path not in {"/api/compare", "/api/completion/verify", "/api/completion/match", "/api/digest", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
                 return self.respond(404, {"error": "Not found"})
             # No cross-origin browser can initiate a paid call or write proposals.
             host = self.headers.get("Host", "")
@@ -47,6 +47,23 @@ def handler_for(database, objects, *, jev_factory=None):
                 if not 0 < length <= 4096:
                     return self.respond(413, {"error": "Invalid request size"})
                 values = json.loads(self.rfile.read(length))
+                if self.path.startswith('/api/completion/'):
+                    from archive.library_completion import CompletionDesk
+                    if not isinstance(values, dict) or not all(isinstance(values.get(k), str) for k in ('collection','release_id')):
+                        raise ValueError('Choose a collection and release')
+                    acquired = comparison_lock.acquire(blocking=False)
+                    if not acquired:
+                        return self.respond(429, {'error': 'An archive action is already running.'})
+                    library = DocumentLibrary(database, objects)
+                    desk = CompletionDesk(library)
+                    if self.path.endswith('/verify'):
+                        return self.respond(200, desk.verify(values['collection'], values['release_id']))
+                    if not all(isinstance(values.get(k), str) for k in ('source_item_id','candidate')):
+                        raise ValueError('Choose an expected item and candidate document')
+                    provider, status = provider_status()
+                    if not status['configured']:
+                        return self.respond(503, {'error': status['message']})
+                    return self.respond(200, desk.match(values['collection'], values['release_id'], values['source_item_id'], values['candidate'], provider))
                 if self.path == '/api/digest':
                     from archive.library_digest import DocumentDigest
                     if not isinstance(values, dict) or not isinstance(values.get('id'), str):
@@ -153,6 +170,18 @@ def handler_for(database, objects, *, jev_factory=None):
                     return self.respond(200, library.inventory_coverage())
                 if parsed.path == "/api/coverage":
                     return self.respond(200, library.coverage(public_only=True))
+                if parsed.path in {'/api/completion','/api/completion/items'}:
+                    from archive.library_completion import CompletionDesk
+                    desk = CompletionDesk(library)
+                    if parsed.path == '/api/completion':
+                        return self.respond(200, desk.releases())
+                    values = parse_qs(parsed.query)
+                    rows = desk.items(values.get('collection',[''])[0], values.get('release_id',[''])[0])
+                    stage = values.get('stage',[''])[0]
+                    if stage:
+                        rows = [r for r in rows if r['stage']==stage]
+                    offset = max(0,int(values.get('offset',['0'])[0]))
+                    return self.respond(200, {'total':len(rows), 'items':rows[offset:offset+50]})
                 parts = parsed.path.strip("/").split("/")
                 if len(parts) in (3, 4, 5, 6) and parts[:2] == ["api", "documents"]:
                     doc = library.document(parts[2], include_pages=False)
@@ -252,6 +281,12 @@ def main(argv=None):
     search.add_argument("query", nargs="?", default="")
     search.add_argument("--collection", default="")
     commands.add_parser("coverage")
+    scopes = commands.add_parser('completion-scopes')
+    scopes.add_argument('path', type=Path)
+    completion = commands.add_parser('completion')
+    completion.add_argument('--collection')
+    completion.add_argument('--release-id')
+    completion.add_argument('--verify', action='store_true')
     commands.add_parser("audit-content")
     review = commands.add_parser("publication")
     review.add_argument("document_id")
@@ -304,6 +339,21 @@ def main(argv=None):
             result = library.search(args.query, args.collection)
         elif args.command == "coverage":
             result = library.coverage()
+        elif args.command in {'completion', 'completion-scopes'}:
+            from archive.library_completion import CompletionDesk
+            desk = CompletionDesk(library)
+            if args.command == 'completion-scopes':
+                scopes = json.loads(args.path.read_text(encoding='utf-8-sig'))
+                desk.register(scopes)
+                result = {'registered':len(scopes)}
+            elif args.verify:
+                if not args.collection or not args.release_id:
+                    parser.error('--verify requires --collection and --release-id')
+                result = desk.verify(args.collection,args.release_id)
+            elif args.collection and args.release_id:
+                result = desk.items(args.collection,args.release_id)
+            else:
+                result = desk.releases()
         elif args.command == "audit-content":
             from archive.library_audit import audit_content
             result = audit_content(library)
