@@ -8,29 +8,6 @@ from evidence_collections.wikileaks.remote_sources import (
 )
 
 
-class FakeResponse:
-    def __init__(self, body: bytes):
-        self._body = io.BytesIO(body)
-
-    def read(self, *args):
-        return self._body.read(*args)
-
-    def readline(self, *args):
-        return self._body.readline(*args)
-
-    def __iter__(self):
-        return iter(self._body)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def close(self):
-        self._body.close()
-
-
 def test_discover_cablegate_csv_url_prefers_largest_csv(monkeypatch) -> None:
     payload = {
         "files": [
@@ -42,7 +19,7 @@ def test_discover_cablegate_csv_url_prefers_largest_csv(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "evidence_collections.wikileaks.remote_sources._open",
-        lambda url, timeout=30.0: FakeResponse(json.dumps(payload).encode("utf-8")),
+        lambda url, timeout=30.0: io.BytesIO(json.dumps(payload).encode("utf-8")),
     )
 
     url = discover_cablegate_csv_url()
@@ -60,7 +37,7 @@ def test_stream_csv_sample_writes_only_requested_records(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(
         "evidence_collections.wikileaks.remote_sources._open",
-        lambda url, timeout=60.0: FakeResponse(body),
+        lambda url, timeout=60.0: io.BytesIO(body),
     )
 
     output = tmp_path / "sample.csv"
