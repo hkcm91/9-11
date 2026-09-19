@@ -64,3 +64,11 @@ This is a partial ordering, not a verified total ordering of the collection.
 More independent image matches, calibrated camera series, or continuous timed
 video are needed to narrow broad intervals. The source files remain hosted by
 their custodians and are not included in the code or output package.
+
+### Explorer ordering panel
+
+The Explorer ships a frozen pilot overlay in `apps/web-explorer/ordering.json`, derived from `minute-ordering.json` in Jev run 35469627152 against corpus run 35468462018. It preserves 3,198 individual asset IDs, five NIST references, two proposed sequences, and the Jev review results. Capture/recording claim copies are omitted from this overlay; the existing Explorer source records retain their time and location claims.
+
+The minute selector joins assets to the current map by parent ID and includes only source-reported minutes within the map window (78 of 80 in the pilot 08:00–12:00 window). Uncertain matches and broad ranges never become minute assignments. Sequence buttons open the chosen attachment at its parent camera location. A selected reference outside the filters remains visible with an explicit inspection label. NIST figures link to the original PDF pages and do not get invented map coordinates.
+
+Both Pages deployment and the scale artifact package the overlay. It is a versioned pilot, not an automatically refreshed analysis; unmatched parent IDs cannot navigate to a map record. External media remain hosted by their sources and may load slowly or be unavailable.

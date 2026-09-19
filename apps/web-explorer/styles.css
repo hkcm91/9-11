@@ -648,3 +648,11 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 .event-anchor-raised { bottom: 44px; }
 .event-anchor-raised span { display: none; }
 .event-anchor-raised::after { height: 3px; }
+
+.ordering-results { max-height: 180px; overflow-y: auto; }
+.ordering-button { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 8px; border: 1px solid #53616f; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 12px; }
+.ordering-button:disabled { opacity: .45; cursor: default; }
+#ordering-panel details { margin-top: 12px; font-size: 12px; }
+#ordering-panel ol { padding-left: 18px; }
+.ordering-asset { border-top: 1px solid #53616f; margin-top: 12px; padding-top: 12px; font-size: 13px; }
+.ordering-asset p { margin: 6px 0; }

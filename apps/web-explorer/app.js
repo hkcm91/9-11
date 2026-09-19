@@ -1,3 +1,4 @@
+import { installOrdering } from "./ordering.mjs";
 import * as maplibregl from "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.mjs";
 
 import { getSceneState, SCENE_LAYERS, updateSceneSources, TOWERS } from "./scene.mjs";
@@ -51,6 +52,8 @@ const state = {
   sceneKey: null,
   detailedScene: null,
   playbackFrame: null,
+  ordering: null,
+  selectedAsset: null,
 };
 
 const el = (id) => document.getElementById(id);
@@ -632,7 +635,10 @@ function renderMarkers() {
   }
   state.markers.clear();
 
-  for (const item of state.visible) {
+  const markerItems = [...state.visible];
+  const selectedReference = state.items.find(item => item.id === state.selectedId);
+  if (selectedReference && !markerItems.some(item => item.id === selectedReference.id)) markerItems.push(selectedReference);
+  for (const item of markerItems) {
     if (!item.location) continue;
 
     const status = claimStatus(item);
@@ -644,7 +650,8 @@ function renderMarkers() {
     node.style.setProperty("--marker-status", markerColor(status));
     node.innerHTML = "<span>" + escapeHtml(symbol) + "</span>";
     node.setAttribute("aria-label", item.title || "Evidence record");
-    node.title = item.title || "Evidence record";
+    const outsideFilters = !state.visible.some(visible => visible.id === item.id);
+    node.title = (item.title || "Evidence record") + (outsideFilters ? " · selected reference outside current filters" : "");
 
     const marker = new maplibregl.Marker({
       element: node,
@@ -667,7 +674,7 @@ function renderMarkers() {
       "<strong>" + escapeHtml(item.title || "Untitled record") + "</strong><span>" +
       escapeHtml(symbol) + " " +
       escapeHtml(item.media_type || "record") + " · " +
-      escapeHtml(evidenceTimeLabel(item)) +
+      escapeHtml(evidenceTimeLabel(item)) + (outsideFilters ? " · selected reference outside current filters" : "") +
       "</span></div>"
     );
 
@@ -826,8 +833,13 @@ function claimHtml(title, claim, kindField) {
 
 function selectItem(id, focusMap) {
   state.selectedId = id;
-  const item = state.items.find((candidate) => candidate.id === id);
-  if (!item) return;
+  const sourceItem = state.items.find((candidate) => candidate.id === id);
+  if (!sourceItem) return;
+  const asset = state.selectedAsset?.parent_id === id ? state.selectedAsset : null;
+  const item = asset && sourceItem.media?.kind === "image" ? {
+    ...sourceItem, media: { ...sourceItem.media, url: asset.url, thumbnail_url: asset.url,
+      name: asset.observation?.filename || asset.title },
+  } : sourceItem;
 
   detailEl.classList.add("open");
   const status = claimStatus(item);
@@ -849,6 +861,7 @@ function selectItem(id, focusMap) {
         </div>
       </div>
       <h2>${escapeHtml(item.title || "Untitled record")}</h2>
+      ${state.visible.some(visible => visible.id === id) ? "" : '<p class="fine-print">Selected camera reference outside the current time or filters. Its pin is shown for inspection, not as evidence captured at the map clock.</p>'}
       <div class="detail-value">${escapeHtml(item.description || "No source description.")}</div>
       ${mediaSectionHtml(item)}
 
@@ -882,6 +895,7 @@ function selectItem(id, focusMap) {
       </div>
     </div>
 
+    ${state.ordering?.detailHtml(item.id) || ""}
     ${claimHtml("Time evidence", item.time, "time_kind")}
     ${claimHtml("Location evidence", item.location, "location_kind")}
 
@@ -1075,6 +1089,18 @@ async function load() {
     const mediaCount = state.items.filter((item) => item.media).length;
     statusEl.textContent = `${state.payload.item_count.toLocaleString()} records · ${mediaCount.toLocaleString()} with media · read model v${state.payload.schema_version}`;
     applyFilters();
+    try {
+      const orderingResponse = await fetch("./ordering.json", { cache: "no-store" });
+      if (!orderingResponse.ok) throw new Error(`HTTP ${orderingResponse.status}`);
+      state.ordering = installOrdering(await orderingResponse.json(), state.items, {
+        escapeHtml, safeSourceUrl, fmtShort, setTime: setTimelineToIso,
+        window: state.payload.window,
+        select: (id, asset) => { state.selectedAsset = asset; selectItem(id, state.mapReady); },
+      });
+    } catch (error) {
+      el("ordering-panel").textContent = "Image ordering is unavailable. The map remains usable.";
+      console.error(error);
+    }
   } catch (error) {
     statusEl.textContent = "Explorer data could not be loaded.";
     el("evidence-strip").innerHTML = `
