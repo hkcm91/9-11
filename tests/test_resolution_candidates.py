@@ -3,7 +3,14 @@ from pathlib import Path
 
 from archive.store import ArchiveStore
 from historical_engine.ai.questions import DecisionQuestion
-from historical_engine.models.graph import Entity, Event, EvidenceItem, Provenance, ReviewState
+from historical_engine.models.graph import (
+    Entity,
+    Event,
+    EvidenceItem,
+    Provenance,
+    Relationship,
+    ReviewState,
+)
 from historical_engine.resolution_candidates import (
     build_resolution_candidates,
     entity_resolution_candidates,
@@ -189,3 +196,80 @@ def test_build_resolution_candidates_combines_both_queues(tmp_path: Path) -> Non
         DecisionQuestion.SAME_EVENT,
     }
     assert all(request.collection_id == "wikileaks" for request in candidates)
+
+
+def test_conflicting_mgrs_suppresses_generic_same_event_candidate(tmp_path: Path) -> None:
+    database = tmp_path / "graph.sqlite"
+    start = datetime(2004, 7, 11, 17, 29, tzinfo=timezone.utc)
+
+    with ArchiveStore(database) as store:
+        for event_id, source_id in (("event:1", "warlog:1"), ("event:2", "warlog:2")):
+            store.put_event(
+                Event(
+                    id=event_id,
+                    collection_id="wikileaks",
+                    name="CACHE FOUND/CLEARED Other",
+                    event_type="sigact",
+                    start_time=start,
+                    status=ReviewState.PROPOSED,
+                    confidence=1.0,
+                    provenance=_provenance(),
+                    evidence=_evidence(source_id),
+                    attributes={"category": "Cache Found/Cleared", "type": "Friendly Action"},
+                )
+            )
+
+        for place_id, mgrs, source_id in (
+            ("place:1", "42SWB3900916257", "warlog:1"),
+            ("place:2", "42SWB9999999999", "warlog:2"),
+        ):
+            store.put_entity(
+                Entity(
+                    id=place_id,
+                    collection_id="wikileaks",
+                    entity_type="place",
+                    canonical_name=mgrs,
+                    status=ReviewState.PROPOSED,
+                    confidence=1.0,
+                    provenance=_provenance(),
+                    evidence=_evidence(source_id),
+                    attributes={"place_kind": "mgrs"},
+                )
+            )
+
+        store.put_relationship(
+            Relationship(
+                id="relationship:1",
+                collection_id="wikileaks",
+                subject_type="event",
+                subject_id="event:1",
+                predicate="occurred_at",
+                object_type="place",
+                object_id="place:1",
+                confidence=1.0,
+                provenance=_provenance(),
+                evidence=_evidence("warlog:1"),
+            )
+        )
+        store.put_relationship(
+            Relationship(
+                id="relationship:2",
+                collection_id="wikileaks",
+                subject_type="event",
+                subject_id="event:2",
+                predicate="occurred_at",
+                object_type="place",
+                object_id="place:2",
+                confidence=1.0,
+                provenance=_provenance(),
+                evidence=_evidence("warlog:2"),
+            )
+        )
+
+        candidates = event_resolution_candidates(
+            store.connection,
+            collection_id="wikileaks",
+            max_time_delta_hours=12,
+        )
+
+    assert candidates == []
