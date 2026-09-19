@@ -18,4 +18,4 @@ jobs:
       - name: Check Explorer JavaScript syntax
         run: node --check apps/web-explorer/app.js
       - name: Test Explorer historical scene
-        run: node --test apps/web-explorer/scene.test.mjs
+        run: node --test apps/web-explorer/*.test.mjs

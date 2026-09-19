@@ -48,6 +48,15 @@ Then open `http://localhost:8000`.
 - entity references and rights note
 - no mutation or verification actions
 
+Untimed records are excluded by default, including after Reset. Enable “Include
+untimed records” to inspect them independently of the clock; counts and time
+labels distinguish these from timed evidence. Missing capture times are never
+inferred from the currently selected scene. Single-ended timestamps are treated
+as instants, and records with two timestamps retain their full interval.
+
+Pages versions local JavaScript modules and CSS with the checked-out commit so
+new HTML cannot accidentally run a previously cached, pre-collapse Explorer app.
+
 ## Intentional limits
 
 ### Time-aware WTC scene
