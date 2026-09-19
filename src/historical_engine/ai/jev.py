@@ -30,6 +30,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from historical_engine.ai.providers import AiProviderError, validate_decision
 from historical_engine.ai.questions import DecisionRequest, DecisionResponse
+from historical_engine.ai.typesafe_http import TypeSafeHttpTransport
 
 
 @runtime_checkable
@@ -52,6 +53,22 @@ class JevDecisionProvider:
     transport: JevTransport | None = None
     name: str = "jev"
     model: str = "jev-unconfigured"
+
+    @classmethod
+    def from_env(
+        cls,
+        *,
+        dotenv_path: str = ".env",
+        timeout_s: float = 30.0,
+    ) -> "JevDecisionProvider":
+        transport = TypeSafeHttpTransport.from_env(
+            dotenv_path=dotenv_path,
+            timeout_s=timeout_s,
+        )
+        return cls(
+            transport=transport,
+            model=transport.config.model,
+        )
 
     @property
     def available(self) -> bool:

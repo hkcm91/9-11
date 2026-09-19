@@ -4,6 +4,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_TYPESAFE_API_URL = "https://api.typesafe.ai/v1/systemone"
+DEFAULT_TYPESAFE_MODEL = "jev-latest"
+DEFAULT_TYPESAFE_AUTH_HEADER = "Authorization"
+DEFAULT_TYPESAFE_AUTH_PREFIX = "Bearer"
+
 
 def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[str, str]:
     """Load a small dotenv-style file without adding a runtime dependency.
@@ -48,6 +53,7 @@ class TypeSafeConfig:
     api_url: str | None
     auth_header: str | None
     auth_prefix: str | None
+    model: str
 
     @property
     def has_api_key(self) -> bool:
@@ -67,6 +73,7 @@ class TypeSafeConfig:
             "api_url_configured": self.has_api_url,
             "auth_header_configured": bool(self.auth_header and self.auth_header.strip()),
             "auth_prefix_configured": bool(self.auth_prefix and self.auth_prefix.strip()),
+            "model": self.model,
             "ready_for_transport": self.ready_for_transport,
         }
 
@@ -81,7 +88,8 @@ def typesafe_config_from_env(
 
     return TypeSafeConfig(
         api_key=os.environ.get("TYPESAFE_API_KEY"),
-        api_url=os.environ.get("TYPESAFE_API_URL"),
-        auth_header=os.environ.get("TYPESAFE_API_AUTH_HEADER"),
-        auth_prefix=os.environ.get("TYPESAFE_API_AUTH_PREFIX"),
+        api_url=os.environ.get("TYPESAFE_API_URL") or DEFAULT_TYPESAFE_API_URL,
+        auth_header=os.environ.get("TYPESAFE_API_AUTH_HEADER") or DEFAULT_TYPESAFE_AUTH_HEADER,
+        auth_prefix=os.environ.get("TYPESAFE_API_AUTH_PREFIX") or DEFAULT_TYPESAFE_AUTH_PREFIX,
+        model=os.environ.get("TYPESAFE_MODEL") or DEFAULT_TYPESAFE_MODEL,
     )

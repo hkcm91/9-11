@@ -285,11 +285,12 @@ Then fill in:
 
 ```dotenv
 TYPESAFE_API_KEY=your_real_key_here
-TYPESAFE_API_URL=the_exact_jev_endpoint_from_your_typesafe_console_or_docs
 
-# Only set these if TypeSafe's documentation requires them:
-TYPESAFE_API_AUTH_HEADER=
-TYPESAFE_API_AUTH_PREFIX=
+# These are the documented defaults and can usually be omitted:
+TYPESAFE_API_URL=https://api.typesafe.ai/v1/systemone
+TYPESAFE_MODEL=jev-latest
+TYPESAFE_API_AUTH_HEADER=Authorization
+TYPESAFE_API_AUTH_PREFIX=Bearer
 ```
 
 Do not commit the real `.env` file.
@@ -306,8 +307,9 @@ Example safe output:
 {
   "api_key_configured": true,
   "api_url_configured": true,
-  "auth_header_configured": false,
-  "auth_prefix_configured": false,
+  "auth_header_configured": true,
+  "auth_prefix_configured": true,
+  "model": "jev-latest",
   "ready_for_transport": true
 }
 ```
@@ -322,21 +324,40 @@ In the repository settings create:
 
 - `TYPESAFE_API_KEY`
 
-**Actions variables**
+**Optional Actions variables**
 
-- `TYPESAFE_API_URL`
-- `TYPESAFE_API_AUTH_HEADER` (only if required)
-- `TYPESAFE_API_AUTH_PREFIX` (only if required)
+- `TYPESAFE_API_URL` (defaults to `https://api.typesafe.ai/v1/systemone`)
+- `TYPESAFE_MODEL` (defaults to `jev-latest`)
+- `TYPESAFE_API_AUTH_HEADER` (defaults to `Authorization`)
+- `TYPESAFE_API_AUTH_PREFIX` (defaults to `Bearer`)
 
-The `wikileaks-sample` workflow now injects those values into the process
+The `wikileaks-sample` workflow injects those values into the process
 environment and runs a secret-safe configuration check.
 
-### Why the endpoint is not hard-coded
+### Real Jev transport
 
-TypeSafe publicly exposes an API service and describes Jev as early access, but
-the public pages do not currently publish a stable Jev request-path/body/auth
-contract. The engine therefore refuses to invent one.
+The documented TypeSafe System One API is now wired through
+`TypeSafeHttpTransport`.
 
-Once the TypeSafe console/docs provide that contract, the remaining integration
-is a small `JevTransport.ask` implementation. The credential/config layer is
-already complete and the resolution queue/batch runner are ready for it.
+It sends a POST request to `/v1/systemone` with:
+
+- the candidate's structured state
+- model `jev-latest`
+- one Choice question named `decision`
+- the engine's exact closed answer vocabulary as the Choice criteria
+
+The response's `choice`, `probabilities`, and `confidence` are translated
+back into the engine's validated `DecisionResponse` and then pass through the
+existing proposal/confidence-routing pipeline.
+
+Run a queue locally with:
+
+```bash
+archive-ingest --collection wikileaks run-jev-decisions \
+  artifacts/reports/resolution-candidates.jsonl \
+  --output artifacts/reports/resolution-decisions.jsonl \
+  --proposal-output artifacts/reports/resolution-proposals.jsonl
+```
+
+The GitHub `wikileaks-sample` workflow also has a `run_jev` checkbox. It is
+off by default so normal archive validation does not spend TypeSafe API credits.
