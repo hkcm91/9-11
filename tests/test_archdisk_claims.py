@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from archive.derived import derive_entity_claims, derive_spatial_claims, derive_temporal_claims
@@ -35,7 +35,7 @@ def test_archdisk_exact_time_becomes_capture_claim_on_september_11() -> None:
 
     assert claim.time_kind == TimeKind.CAPTURE
     assert claim.start_time == datetime(2001, 9, 11, 8, 40, tzinfo=ZoneInfo("America/New_York"))
-    assert claim.end_time == claim.start_time
+    assert claim.end_time - claim.start_time == timedelta(microseconds=999999)
     assert claim.method == "archdisk_time_taken"
 
 
@@ -64,3 +64,26 @@ def test_archdisk_name_becomes_photographer_entity_claim() -> None:
     assert claim.role == EntityRole.PHOTOGRAPHER
     assert claim.name_raw == "John Labriola"
     assert claim.confidence == 0.90
+
+
+def test_minute_notation_does_not_claim_second_precision():
+    claim = derive_temporal_claims([make_archdisk(time_taken="09:15")])[0]
+    assert claim.end_time - claim.start_time == timedelta(seconds=60, microseconds=-1)
+    assert "accuracy is unknown" in claim.evidence[0].note
+
+
+def test_range_bucket_preserves_interval_and_provenance():
+    item = make_archdisk(folder="9:03-9:59AM")
+    claim = derive_temporal_claims([item])[0]
+    assert claim.start_time.isoformat() == "2001-09-11T09:03:00-04:00"
+    assert claim.end_time.isoformat() == "2001-09-11T09:59:00-04:00"
+    assert claim.status == "proposed"
+    assert item.metadata_raw["folder_path"] in claim.evidence[0].note
+
+
+def test_after_bucket_is_open_ended_and_event_labels_are_not_exact_times():
+    claim = derive_temporal_claims([make_archdisk(folder="After 10:28AM")])[0]
+    assert claim.start_time.hour == 10
+    assert claim.end_time is None
+    for label in ("10:28AM - WTC1 Collapse", "Unknown", "5:20PM - WTC7 Collapse"):
+        assert derive_temporal_claims([make_archdisk(folder=label)]) == []

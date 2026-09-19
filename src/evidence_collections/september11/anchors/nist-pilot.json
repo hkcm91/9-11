@@ -1,0 +1,229 @@
+{
+  "version": 1,
+  "source_document": {
+    "url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf",
+    "sha256": "adfa73b47e189dacdf63ff12aae34bc796fec8b6fb5e8213d850d3635a6fcf1f",
+    "timing_reference_pages": [
+      118,
+      119
+    ],
+    "clock_note": "Section 3.6 says database times were adjusted +5 seconds for precise reported times. Published adjusted figure labels must not receive a second +5-second adjustment. No metadata here is described as perfect."
+  },
+  "anchors": [
+    {
+      "id": "nist-ncstar1-5av1-fig-6-2",
+      "figure": "6-2",
+      "pdf_page": 156,
+      "printed_page": 60,
+      "source_url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf#page=156",
+      "creator": "Carmen Taylor",
+      "reported_time": "2001-09-11T08:46:55-04:00",
+      "clock_basis": "published_adjusted_report_label",
+      "uncertainty_seconds": null,
+      "status": "source_reported_not_independently_verified",
+      "note": "WTC1 initial smoke and debris, southeast view. Per-image uncertainty is not printed in this caption. Do not assign the report-wide three-second statistic to this image."
+    },
+    {
+      "id": "nist-ncstar1-5av1-fig-7-3",
+      "figure": "7-3",
+      "pdf_page": 185,
+      "printed_page": 89,
+      "source_url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf#page=185",
+      "creator": "Carmen Taylor",
+      "reported_time": "2001-09-11T09:03:04-04:00",
+      "clock_basis": "published_adjusted_report_label",
+      "uncertainty_seconds": null,
+      "status": "source_reported_not_independently_verified",
+      "note": "Rounded label 9:03:04; caption gives 4.3 seconds after WTC2 impact. Per-image uncertainty is not printed in this caption. Do not assign the report-wide three-second statistic to this image."
+    },
+    {
+      "id": "nist-ncstar1-5av1-fig-7-4",
+      "figure": "7-4",
+      "pdf_page": 186,
+      "printed_page": 90,
+      "source_url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf#page=186",
+      "creator": "Mark Stetler",
+      "reported_time": "2001-09-11T09:03:04-04:00",
+      "clock_basis": "published_adjusted_report_label",
+      "uncertainty_seconds": null,
+      "status": "source_reported_not_independently_verified",
+      "note": "Rounded label 9:03:04; caption gives 4.6 seconds after WTC2 impact. Per-image uncertainty is not printed in this caption. Do not assign the report-wide three-second statistic to this image."
+    },
+    {
+      "id": "nist-ncstar1-5av1-fig-7-5",
+      "figure": "7-5",
+      "pdf_page": 187,
+      "printed_page": 91,
+      "source_url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf#page=187",
+      "creator": "Sean Adair",
+      "reported_time": "2001-09-11T09:03:03-04:00",
+      "clock_basis": "published_adjusted_report_label",
+      "uncertainty_seconds": null,
+      "status": "source_reported_not_independently_verified",
+      "note": "Rounded label 9:03:03; caption gives 4.3 seconds after WTC2 impact. Use label as reported; do not silently reconcile rounding. Per-image uncertainty is not printed in this caption. Do not assign the report-wide three-second statistic to this image."
+    },
+    {
+      "id": "nist-ncstar1-5av1-fig-7-8",
+      "figure": "7-8",
+      "pdf_page": 190,
+      "printed_page": 94,
+      "source_url": "https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1-5av1.pdf#page=190",
+      "creator": "Sean Adair",
+      "reported_time": "2001-09-11T09:03:08-04:00",
+      "clock_basis": "published_adjusted_report_label",
+      "uncertainty_seconds": null,
+      "status": "source_reported_not_independently_verified",
+      "note": "Rounded label 9:03:08; caption gives 8.7 seconds after WTC2 impact. Per-image uncertainty is not printed in this caption. Do not assign the report-wide three-second statistic to this image."
+    }
+  ],
+  "observations": [
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:801",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 801,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/801",
+      "filename": "01_plane.jpg",
+      "sha256": "d8670d4d95a26554e49df6ea2e79cb33b07f3b3b1fe821bb56641a9a1b708660",
+      "observation": "Aircraft visible approaching WTC2. WTC2 has no impact fireball; WTC1 is already smoking.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:802",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 802,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/802",
+      "filename": "02_impact.jpg",
+      "sha256": "8d6193f6e3ced61801a8860e01d09c84827c226a993163c2f55e3be95ec95d78",
+      "observation": "Compact nascent fireball from WTC2, with falling debris. Earlier phase than the expanded fireball in 803.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:803",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 803,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/803",
+      "filename": "03_fireball_01.jpg",
+      "sha256": "7d8d3b18b1fb55f34d6fd5f2fdf80024ebbafaac9393ccea1ba45ced25e7aa45",
+      "observation": "Expanded bright lobed fireball beside WTC2; two distinctive debris fragments below it. Same scene details as NIST figure 7-5 after crop and grayscale conversion.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:804",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 804,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/804",
+      "filename": "04_fireball_02.jpg",
+      "sha256": "01c7f47b94451210f05f74e271703141f17190f2545b662df2bd829d776a58dc",
+      "observation": "Fireball has risen and darkened, with a smaller bright area near its upper center. WTC1 edges and lobe contours match NIST figure 7-8 after crop and grayscale conversion.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:805",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 805,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/805",
+      "filename": "05_afterblast.jpg",
+      "sha256": "307ac655bc4b106052af99f00261047818d04d0347cff9f3353fe66d1224b3dd",
+      "observation": "Visible fireball has mostly extinguished; a dark thermal rises above WTC2. No exact time can be read.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:806",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406",
+      "attachment_id": 806,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/406/attachments/806",
+      "filename": "06_mushroom.jpg",
+      "sha256": "4d5bf30b07030e8e62fdb7e652ce82c6875feb7e7d3bd986f1abcbd6fd9ba49a",
+      "observation": "Thermal has risen and spread further; viewpoint/crop is tighter. No exact time can be read.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:736",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379",
+      "attachment_id": 736,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/379/attachments/736",
+      "filename": "2002-Robert-Clark-SNS1-AD.jpg",
+      "sha256": "4670034d8bd081a44afe348697cac2c8b803b40a2756351ec92c38732a42858d",
+      "observation": "Aircraft is approaching WTC2 from the left; tower is not yet impacted.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:737",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379",
+      "attachment_id": 737,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/379/attachments/737",
+      "filename": "2002-Robert-Clark-SNS1-BD.jpg",
+      "sha256": "d6e5429cc3b64f34b33396ef4f1a1a423921178201a1ccb03645de73da41aca1",
+      "observation": "Aircraft is much closer to WTC2 than in 736. WTC2 still has no fireball.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:738",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379",
+      "attachment_id": 738,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/379/attachments/738",
+      "filename": "2002-Robert-Clark-SNS1-CD.jpg",
+      "sha256": "36b772310381691c311edbcd51c74cc3d236a48b9dc800b3729e850382904ac9",
+      "observation": "Fireballs erupt to the sides of WTC2; plume is lower and less developed than in 739.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:739",
+      "parent_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379",
+      "attachment_id": 739,
+      "url": "https://services5.arcgis.com/TXlBstKeKohAz32a/arcgis/rest/services/September_11_Photo_Collection_Map/FeatureServer/0/379/attachments/739",
+      "filename": "2002-Robert-Clark-SNS1-DD.jpg",
+      "sha256": "560f187a220b16b2eea203f2d262dd19f10acce0ef64b74f3ff43dfce9d0ca38",
+      "observation": "Fireballs have expanded and risen, with greater descending debris than in 738.",
+      "observer": "Codex visual inspection",
+      "human_verified": false
+    }
+  ],
+  "matches": [
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:803",
+      "anchor_id": "nist-ncstar1-5av1-fig-7-5",
+      "basis": "Expanded bright lobed fireball beside WTC2; two distinctive debris fragments below it. Same scene details as NIST figure 7-5 after crop and grayscale conversion.",
+      "status": "proposed_visual_match"
+    },
+    {
+      "asset_id": "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:804",
+      "anchor_id": "nist-ncstar1-5av1-fig-7-8",
+      "basis": "Fireball has risen and darkened, with a smaller bright area near its upper center. WTC1 edges and lobe contours match NIST figure 7-8 after crop and grayscale conversion.",
+      "status": "proposed_visual_match"
+    }
+  ],
+  "sequences": [
+    {
+      "id": "sequence-406",
+      "asset_ids": [
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:801",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:802",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:803",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:804",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:805",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:406:attachment:806"
+      ],
+      "basis": "Visual state progression and source attachment filenames; proposed order only. Same photographer does not prove equal time spacing or unbroken recording."
+    },
+    {
+      "id": "sequence-379",
+      "asset_ids": [
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:736",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:737",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:738",
+        "archdisk-911-photo-map:66dda83bf4194d50a5a9d7fe52d12dc6:379:attachment:739"
+      ],
+      "basis": "Visual state progression and source attachment filenames; proposed order only. Same photographer does not prove equal time spacing or unbroken recording."
+    }
+  ]
+}

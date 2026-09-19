@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
@@ -124,7 +124,7 @@ def _archdisk_capture_time_claim(item: SourceItem) -> TemporalClaim | None:
                     subject_id=item.id,
                     time_kind=TimeKind.CAPTURE,
                     start_time=captured,
-                    end_time=captured,
+                    end_time=captured + timedelta(seconds=1 if match.group("s") else 60) - timedelta(microseconds=1),
                     confidence=0.85,
                     method="archdisk_time_taken",
                     created_by_agent="deterministic-archdisk-importer",
@@ -134,7 +134,8 @@ def _archdisk_capture_time_claim(item: SourceItem) -> TemporalClaim | None:
                             relationship="community_map_capture_time",
                             note=(
                                 f"Capture time {raw_time.strip()} preserved from archDisk timeTaken metadata; "
-                                "date anchored to the map's September 11, 2001 event scope."
+                                "date anchored to the map's September 11, 2001 event scope. "
+                                "Interval preserves stated second/minute precision; camera-clock accuracy is unknown."
                             ),
                             weight=0.85,
                         )
@@ -160,6 +161,32 @@ def _archdisk_capture_time_claim(item: SourceItem) -> TemporalClaim | None:
                 )
             ],
         )
+    # These are the map curator's broad bins, not independently timed events.
+    # Do not turn impact/collapse-labelled bins into an exact event timestamp.
+    if isinstance(folder, str):
+        bounds = {
+            "8:46-9:03am": ((8, 46), (9, 3)),
+            "9:03-9:59am": ((9, 3), (9, 59)),
+            "9:59-10:28am": ((9, 59), (10, 28)),
+            "after 10:28am": ((10, 28), None),
+        }.get(folder.strip().casefold())
+        if bounds is not None:
+            start, end = bounds
+            return TemporalClaim(
+                subject_id=item.id,
+                time_kind=TimeKind.CAPTURE,
+                start_time=datetime(2001, 9, 11, *start, tzinfo=_NY_TZ),
+                end_time=datetime(2001, 9, 11, *end, tzinfo=_NY_TZ) if end else None,
+                confidence=0.70,
+                method="archdisk_folder_time_bucket",
+                created_by_agent="deterministic-archdisk-importer",
+                evidence=[EvidenceRef(
+                    source_item_id=item.id,
+                    relationship="community_map_time_bucket",
+                    note=f"Curator's original capture-time bin: {folder}. Bounds are approximate, not a frame-level timestamp; independent corroboration is required.",
+                    weight=0.70,
+                )],
+            )
     return None
 
 
