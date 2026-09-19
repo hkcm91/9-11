@@ -53,6 +53,11 @@ default so existing commands and workflows keep working.
 
 ## Documentation
 
+The [public-interest document library](docs/DOCUMENT_LIBRARY.md) adds a local
+searchable reader, preserved document versions, page citations, and Jev-assisted
+comparisons alongside the existing map. Start with `archive-library serve` after
+installing `.[documents]` and importing/reviewing a source manifest.
+
 | Document | What it covers |
 | --- | --- |
 | `docs/ENGINE.md` | The engine, what a collection defines, the claim lifecycle, the evidence graph, AI boundaries, and how to add a collection |

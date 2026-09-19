@@ -5,6 +5,9 @@ __pycache__/
 build/
 dist/
 .venv/
+artifacts/library.sqlite*
+artifacts/library-objects/
+artifacts/pentagon-papers-index.pdf
 
 # Local credentials / environment
 .env
