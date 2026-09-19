@@ -1,0 +1,82 @@
+{
+  "type": "FeatureCollection",
+  "attribution": "OpenStreetMap contributors, ODbL 1.0; https://www.openstreetmap.org/copyright",
+  "retrieved": "2026-09-19",
+  "note": "Memorial pool geometry used only to estimate tower centers and alignment, not historical outer footprint dimensions.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "tower": "north",
+        "osmWay": "697722178",
+        "version": 9,
+        "timestamp": "2026-09-01T16:34:10Z",
+        "source": "https://www.openstreetmap.org/way/697722178"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0133003,
+              40.7124708
+            ],
+            [
+              -74.0136132,
+              40.712045
+            ],
+            [
+              -74.0130509,
+              40.7118076
+            ],
+            [
+              -74.012738,
+              40.7122334
+            ],
+            [
+              -74.0133003,
+              40.7124708
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tower": "south",
+        "osmWay": "697722181",
+        "version": 9,
+        "timestamp": "2026-09-01T16:34:10Z",
+        "source": "https://www.openstreetmap.org/way/697722181"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0132052,
+              40.7113612
+            ],
+            [
+              -74.0135181,
+              40.7109354
+            ],
+            [
+              -74.0129558,
+              40.710698
+            ],
+            [
+              -74.0126429,
+              40.7111238
+            ],
+            [
+              -74.0132052,
+              40.7113612
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

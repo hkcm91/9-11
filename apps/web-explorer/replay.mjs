@@ -20,6 +20,16 @@ export function sampleSouthPose(seconds) {
     cohesion: values[4] };
 }
 
+// Preserve physical size; breakup separates full-size model sections.
+export function upperSectionPose(index, bottom, split, collapseAge, cohesion) {
+  const separation = Math.max(0, 1 - cohesion);
+  const age = Math.max(0, collapseAge - 3);
+  return { x: (seeded(index + 600) - .5) * separation * 35,
+    y: (seeded(index + 620) - .5) * separation * 28,
+    z: bottom - split - separation * age * index * 1.8,
+    angle: (seeded(index + 640) - .5) * separation * .35 };
+}
+
 export function sampleReplay(historicalTime, motion = true) {
   const time = Number(historicalTime);
   if (!Number.isFinite(time)) throw new TypeError('A valid historical time is required');
@@ -53,5 +63,5 @@ export function smokeParticle(index, age) {
   return { x: 8 + phase * 115 + (seeded(index + 1) - .5) * 30,
     y: -phase * 75 + (seeded(index + 2) - .5) * 35,
     z: phase * 180, radius: 13 + phase * 30,
-    opacity: Math.sin(phase * Math.PI) * .16 };
+    opacity: (.35 + .65 * Math.sin(phase * Math.PI)) * .24 * Math.min(1, (1-phase)*8) };
 }

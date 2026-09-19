@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
-import { TOWERS } from './scene.mjs';
-import { sampleReplay, seeded, smokeParticle } from './replay.mjs';
+import { TOWERS, TOWER_BEARING } from './scene.mjs';
+import { sampleReplay, seeded, smokeParticle, upperSectionPose } from './replay.mjs';
 
 // Meter-based procedural models. All geometry is authored locally, Z is up.
 export function createTowerLayer(maplibregl) {
@@ -12,10 +12,28 @@ export function createTowerLayer(maplibregl) {
   const light = new THREE.DirectionalLight(0xfff1d5, 2.1);
   light.position.set(-300, -200, 800); scene.add(light);
   const box = new THREE.BoxGeometry(1, 1, 1);
-  const sphere = new THREE.SphereGeometry(1, 12, 8);
+  const outline = new THREE.Shape();
+  const c = 2.1 / 63.4;
+  const corners = [[-.5+c,-.5],[.5-c,-.5],[.5,-.5+c],[.5,.5-c],[.5-c,.5],[-.5+c,.5],[-.5,.5-c],[-.5,-.5+c]];
+  corners.forEach(([x,y],i)=>i ? outline.lineTo(x,y) : outline.moveTo(x,y)); outline.closePath();
+  const towerBody = new THREE.ExtrudeGeometry(outline,{depth:1,bevelEnabled:false});
+  towerBody.translate(0,0,-.5);
+  // Soft camera-facing density patches avoid visibly spherical smoke bubbles.
+  const cloudGeometry = new THREE.PlaneGeometry(2, 2);
+  const canvas = document.createElement('canvas'); canvas.width=128; canvas.height=128;
+  const context=canvas.getContext('2d');
+  const gradient=context.createRadialGradient(64,64,0,64,64,64);
+  gradient.addColorStop(0,'rgba(255,255,255,0.85)');
+  gradient.addColorStop(.35,'rgba(255,255,255,0.65)');
+  gradient.addColorStop(.7,'rgba(255,255,255,0.2)');
+  gradient.addColorStop(1,'rgba(255,255,255,0)');
+  context.fillStyle=gradient;context.fillRect(0,0,128,128);
+  const cloudTexture=new THREE.CanvasTexture(canvas);
+  const faceCamera=new THREE.Quaternion(), pitchRotation=new THREE.Quaternion();
+  const axisZ=new THREE.Vector3(0,0,1),axisX=new THREE.Vector3(1,0,0);
   const materials = {
-    wall: new THREE.MeshLambertMaterial({ color: 0x555e61 }),
-    frame: new THREE.MeshLambertMaterial({ color: 0xc2beb1 }),
+    wall: new THREE.MeshLambertMaterial({ color: 0x737977 }),
+    frame: new THREE.MeshLambertMaterial({ color: 0xb7b9b3 }),
     roof: new THREE.MeshLambertMaterial({ color: 0x8a8980 }),
     damage: new THREE.MeshLambertMaterial({ color: 0x242120 }),
     rubble: new THREE.MeshLambertMaterial({ color: 0x827b70 }),
@@ -44,7 +62,7 @@ export function createTowerLayer(maplibregl) {
     const group = new THREE.Group();
     const location = maplibregl.MercatorCoordinate.fromLngLat([tower.lng,tower.lat],0);
     group.position.set((location.x-origin.x)/scale, -(location.y-origin.y)/scale, 0);
-    group.rotation.z = -28.5 * Math.PI / 180;
+    group.rotation.z = TOWER_BEARING * Math.PI / 180;
     root.add(group);
     const lower = new THREE.Group(), upper = new THREE.Group();
     const split = tower.id === 'south' ? 300 : 350;
@@ -53,30 +71,38 @@ export function createTowerLayer(maplibregl) {
     const section = (parent, bottom, top, offset) => {
       const part = new THREE.Group(); part.position.z = bottom-offset; parent.add(part);
       const height = top-bottom;
-      mesh(part, materials.wall,0,0,height/2,62.8,62.8,height);
+      const shell = mesh(part, materials.wall,0,0,height/2,63.4,63.4,height);
+      shell.geometry = towerBody;
       const ribs = [];
-      for(let i=0;i<60;i++) {
-        const x=-31+i*62/59;
-        ribs.push([x,-31.65,height/2,.38,.55,height],[x,31.65,height/2,.38,.55,height],
-          [-31.65,x,height/2,.55,.38,height],[31.65,x,height/2,.55,.38,height]);
+      for(let i=0;i<59;i++) {
+        const x=(i-29)*1.016;
+        ribs.push([x,-31.65,height/2,.36,.55,height],[x,31.65,height/2,.36,.55,height],
+          [-31.65,x,height/2,.55,.36,height],[31.65,x,height/2,.55,.36,height]);
       }
-      for(let z=3.8;z<height;z+=3.8) ribs.push([0,-31.65,z,63.4,.5,.24],
-        [0,31.65,z,63.4,.5,.24],[-31.65,0,z,.5,63.4,.24],[31.65,0,z,.5,63.4,.24]);
+      for(let floor=Math.ceil((bottom+.1)/(tower.height/110));floor*(tower.height/110)<top;floor++) {
+        const z=floor*(tower.height/110)-bottom;
+        ribs.push([0,-31.65,z,59,.5,.24],
+        [0,31.65,z,59,.5,.24],[-31.65,0,z,.5,59,.24],[31.65,0,z,.5,59,.24]);
+      }
       instances(part,materials.frame,ribs); sections.push({part,bottom,top,parent});
     };
     for(let bottom=0;bottom<split;bottom+=19) section(lower,bottom,Math.min(split,bottom+19),0);
-    section(upper,split,tower.height,split);
+    for(let bottom=split;bottom<tower.height;bottom+=38) section(upper,bottom,Math.min(tower.height,bottom+38),split);
     // Mechanical bands, parapet and rooftop equipment distinguish the silhouettes.
-    for(const z of [154,292,409]) {
-      const parent=z>=split?upper:lower, local=z-(z>=split?split:0);
-      mesh(parent,materials.roof,0,0,local,63.7,63.7,5);
+    for(const floor of [7,41,75,108]) {
+      const z=floor*tower.height/110;
+      const section = sections.find(s => z >= s.bottom && z < s.top);
+      const parent = section.part, local=z-section.bottom;
+      mesh(parent,materials.roof,0,0,local,63.7,63.7,2*tower.height/110);
     }
-    mesh(upper,materials.roof,0,0,tower.height-split,63.5,63.5,2);
-    mesh(upper,materials.frame,0,0,tower.height-split+1.5,64,64,1);
-    mesh(upper,materials.roof,0,0,tower.height-split+3,18,24,5);
+    const roofSection = sections.at(-1);
+    const roof = roofSection.part, roofBase = roofSection.bottom;
+    mesh(roof,materials.roof,0,0,tower.height-roofBase,63.5,63.5,2);
+    mesh(roof,materials.frame,0,0,tower.height-roofBase+1.5,64,64,1);
+    mesh(roof,materials.roof,0,0,tower.height-roofBase+3,18,24,5);
     if(tower.id==='north') {
-      mesh(upper,materials.frame,0,0,417-split+55,2.4,2.4,110);
-      mesh(upper,materials.roof,0,0,417-split+7,7,7,14);
+      mesh(roof,materials.frame,0,0,417-roofBase+55,2.4,2.4,110);
+      mesh(roof,materials.roof,0,0,417-roofBase+7,7,7,14);
     }
     const damage = new THREE.Group(); group.add(damage);
     for(let i=0;i<9;i++) {
@@ -92,8 +118,8 @@ export function createTowerLayer(maplibregl) {
     const fragments = new THREE.Group(); group.add(fragments);
     for(let i=0;i<20;i++) mesh(fragments,materials.frame,0,0,0,5,1,12);
     const clouds = (count,color) => Array.from({length:count},()=>{
-      const material=new THREE.MeshBasicMaterial({color,transparent:true,opacity:0,depthWrite:false});
-      const node=new THREE.Mesh(sphere,material); node.frustumCulled=false; group.add(node); return node;
+      const material=new THREE.MeshBasicMaterial({color,map:cloudTexture,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide});
+      const node=new THREE.Mesh(cloudGeometry,material); node.frustumCulled=false; group.add(node); return node;
     });
     return {tower,group,lower,upper,split,sections,damage,debris,fragments,
       smoke:clouds(28,0x64635e),dust:clouds(24,0xb1a798)};
@@ -118,7 +144,11 @@ export function createTowerLayer(maplibregl) {
         model.lower.visible=standing||collapsing; model.upper.visible=standing||(collapsing&&s.pose.cohesion>.05);
         model.upper.position.set(collapsing?s.pose.drop*.08:0,collapsing?-s.pose.drop*.04:0,model.split-(collapsing?s.pose.drop:0));
         model.upper.rotation.set(collapsing?s.pose.tilt*.6:0,collapsing?s.pose.tilt:0,0);
-        model.upper.scale.setScalar(collapsing?Math.max(.25,s.pose.cohesion):1);
+        model.upper.scale.setScalar(1);
+        model.sections.filter(section=>section.parent===model.upper).forEach(({part,bottom},index)=>{
+          const pose=upperSectionPose(index,bottom,model.split,collapsing?s.collapseAge:0,collapsing?s.pose.cohesion:1);
+          part.position.set(pose.x,pose.y,pose.z);part.rotation.set(pose.angle,-pose.angle*.5,0);
+        });
         model.sections.forEach(({part,bottom,parent})=>{part.visible=parent===model.upper||!collapsing||bottom<s.pose.front;});
         // Hide lower mechanical bands as the descending front passes them.
         model.lower.children.filter(node=>node.isMesh).forEach(node=>{node.visible=!collapsing||node.position.z<s.pose.front;});
@@ -152,6 +182,10 @@ export function createTowerLayer(maplibregl) {
     },
     render(gl,args) {
       if(!visible) return;
+      faceCamera.setFromAxisAngle(axisZ,(-map.getBearing()-TOWER_BEARING)*Math.PI/180);
+      pitchRotation.setFromAxisAngle(axisX,map.getPitch()*Math.PI/180);
+      faceCamera.multiply(pitchRotation);
+      for(const model of models) for(const node of [...model.smoke,...model.dust]) node.quaternion.copy(faceCamera);
       camera.projectionMatrix.fromArray(args.defaultProjectionData.mainMatrix).multiply(transform);
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
       renderer.resetState(); renderer.render(scene,camera); renderer.resetState();
@@ -159,7 +193,7 @@ export function createTowerLayer(maplibregl) {
     onRemove() {
       const geometries=new Set(),mats=new Set();
       scene.traverse(node=>{if(node.geometry)geometries.add(node.geometry);if(node.material)mats.add(node.material);});
-      geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer?.dispose();
+      geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());cloudTexture.dispose();renderer?.dispose();
     },
   };
   return layer;

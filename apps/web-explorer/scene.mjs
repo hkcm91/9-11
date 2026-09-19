@@ -1,11 +1,12 @@
-// Minute-resolution reconstruction, matching the Explorer's existing EDT anchors.
+// NIST event times; geographic centers from OSM memorial-pool reference geometry.
 // Geometry and atmospheric effects are illustrative, not a forensic simulation.
+export const TOWER_BEARING = -29.117;
 export const TOWERS = [
-  { id: 'north', name: 'North Tower', lng: -74.01337, lat: 40.71273, height: 417,
-    impact: '2001-09-11T08:46:00-04:00', collapse: '2001-09-11T10:28:00-04:00',
+  { id: 'north', name: 'North Tower', lng: -74.0131756, lat: 40.7121392, height: 417,
+    impact: '2001-09-11T08:46:30-04:00', collapse: '2001-09-11T10:28:22-04:00',
     face: 1, impactBase: 350, impactTop: 377 },
-  { id: 'south', name: 'South Tower', lng: -74.01339, lat: 40.71173, height: 415,
-    impact: '2001-09-11T09:03:00-04:00', collapse: '2001-09-11T09:59:00-04:00',
+  { id: 'south', name: 'South Tower', lng: -74.0130805, lat: 40.7110296, height: 415,
+    impact: '2001-09-11T09:02:59-04:00', collapse: '2001-09-11T09:58:59-04:00',
     face: -1, impactBase: 290, impactTop: 324 },
 ];
 
@@ -21,7 +22,7 @@ export function getSceneState(historicalTime) {
 
 // Local x/y axes follow the existing rotated tower footprints; +y is north face.
 function coordinate(tower, x, y) {
-  const angle = -28.5 * Math.PI / 180;
+  const angle = TOWER_BEARING * Math.PI / 180;
   return [
     tower.lng + (x * Math.cos(angle) - y * Math.sin(angle)) / (111320 * Math.cos(tower.lat * Math.PI / 180)),
     tower.lat + (x * Math.sin(angle) + y * Math.cos(angle)) / 111320,

@@ -1,6 +1,6 @@
 import * as maplibregl from "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.mjs";
 
-import { getSceneState, SCENE_LAYERS, updateSceneSources } from "./scene.mjs";
+import { getSceneState, SCENE_LAYERS, updateSceneSources, TOWERS } from "./scene.mjs";
 
 import { timeBounds, matchesHistoricalTime, summarizeTimes } from "./evidence-time.mjs";
 
@@ -9,17 +9,17 @@ import { sampleReplay } from "./replay.mjs";
 const DATA_URL = "./data/explorer.json";
 
 const EVENT_ANCHORS = [
-  { time: "2001-09-11T08:46:00-04:00", label: "8:46", detail: "Flight 11 impact" },
-  { time: "2001-09-11T09:03:00-04:00", label: "9:03", detail: "Flight 175 impact" },
+  { time: TOWERS[0].impact, label: "8:46:30", detail: "Flight 11 impact" },
+  { time: TOWERS[1].impact, label: "9:02:59", detail: "Flight 175 impact" },
   { time: "2001-09-11T09:37:00-04:00", label: "9:37", detail: "Pentagon impact" },
-  { time: "2001-09-11T09:59:00-04:00", label: "9:59", detail: "South Tower collapse" },
+  { time: TOWERS[1].collapse, label: "9:58:59", detail: "South Tower collapse" },
   { time: "2001-09-11T10:03:00-04:00", label: "10:03", detail: "Flight 93 crash" },
-  { time: "2001-09-11T10:28:00-04:00", label: "10:28", detail: "North Tower collapse" },
+  { time: TOWERS[0].collapse, label: "10:28:22", detail: "North Tower collapse" },
 ];
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/fiord";
 const MAP_HOME = {
-  center: [-74.0130, 40.7131],
+  center: [-74.0130, 40.7125],
   zoom: 15.1,
   pitch: 58,
   bearing: 27,
@@ -480,7 +480,7 @@ function configureTimeline() {
   timelineEl.min = "0";
   timelineEl.max = String(Math.max(1, Math.round((end - start) / 1000)));
   timelineEl.value = "0";
-  const sequenceStart = new Date("2001-09-11T09:58:55-04:00");
+  const sequenceStart = new Date(Date.parse(TOWERS[1].collapse) - 5000);
   el("south-sequence").disabled = sequenceStart < start || sequenceStart > end;
   el("time-start").textContent = fmtShort(start);
   el("time-end").textContent = fmtShort(end);
@@ -498,7 +498,7 @@ function renderEventAnchors(start, end) {
     const eventTime = parseTime(event.time);
     if (!eventTime || eventTime < start || eventTime > end) continue;
     const anchor = document.createElement("div");
-    anchor.className = "event-anchor";
+    anchor.className = "event-anchor" + (event.label === "10:03" ? " event-anchor-raised" : "");
     anchor.style.left = `${((eventTime.getTime() - start.getTime()) / total) * 100}%`;
     anchor.innerHTML = `<strong>${escapeHtml(event.label)}</strong><span>${escapeHtml(event.detail)}</span>`;
     band.appendChild(anchor);
@@ -555,8 +555,8 @@ function updateHistoricalScene() {
   updateSceneSources(state.map, getSceneState(time));
   if (scene.south === "collapsing") {
     const labels = { type: "FeatureCollection", features: [
-      { type: "Feature", properties: { label: "NORTH TOWER · IMPACTED" }, geometry: { type: "Point", coordinates: [-74.01337,40.71273] } },
-      { type: "Feature", properties: { label: "SOUTH TOWER · COLLAPSE SEQUENCE" }, geometry: { type: "Point", coordinates: [-74.01339,40.71173] } },
+      { type: "Feature", properties: { label: "NORTH TOWER · IMPACTED" }, geometry: { type: "Point", coordinates: [TOWERS[0].lng,TOWERS[0].lat] } },
+      { type: "Feature", properties: { label: "SOUTH TOWER · COLLAPSE SEQUENCE" }, geometry: { type: "Point", coordinates: [TOWERS[1].lng,TOWERS[1].lat] } },
     ] };
     state.map.getSource("wtc-labels").setData(labels);
   }
@@ -985,8 +985,8 @@ function wireControls() {
   }
   el("south-sequence").addEventListener("click", () => {
     pausePlayback();
-    setTimelineToIso("2001-09-11T09:58:55-04:00");
-    state.map.flyTo({ center: [-74.0130,40.7140], zoom: sceneZoom(), pitch: 58, bearing: -25, duration: 0 });
+    setTimelineToIso(new Date(Date.parse(TOWERS[1].collapse) - 5000).toISOString());
+    state.map.flyTo({ center: [-74.0130,40.7134], zoom: sceneZoom(), pitch: 58, bearing: -25, duration: 0 });
   });
   timelineEl.addEventListener("input", () => { pausePlayback(); applyFilters(); });
   el("window-size").addEventListener("change", applyFilters);
@@ -1047,7 +1047,7 @@ function makeEventAnchorsClickable() {
     node.dataset.time = visibleEvents[index]?.time || "";
     node.style.pointerEvents = "auto";
     node.style.cursor = "pointer";
-    node.title = visibleEvents[index]?.detail || "";
+    node.title = `${visibleEvents[index]?.detail || ""} · ${fmtTime(visibleEvents[index]?.time)}`;
   });
 }
 

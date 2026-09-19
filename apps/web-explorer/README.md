@@ -77,12 +77,12 @@ Playback stops at the timeline end and never loops or starts automatically.
 Reduced-motion preferences default reconstructed motion off.
 
 `replay.mjs` samples fixed authored poses over an **illustrative 12-second South
-Tower sequence beginning at the existing rounded 09:59:00 EDT anchor**. Upper
+Tower sequence beginning at NIST's 09:58:59 EDT collapse-initiation time**. Upper
 section descent/tilt, progressive removal of lower sections, façade fragments,
 and dust are deterministic functions of historical time. These are animation
 parameters, not measured trajectories, a physical simulation, or a footage-
 calibrated reconstruction. The North Tower still changes directly to rubble at
-10:28; a detailed North Tower collapse sequence is deferred.
+10:28:22 EDT; a detailed North Tower collapse sequence is deferred.
 
 Smoke samples use fixed seeds and historical time rather than accumulated particle
 state. Dust expands and thins over an illustrative five minutes. Pausing stops
@@ -100,12 +100,13 @@ Run all scene, replay and time-filter checks with `node --test apps/web-explorer
 
 ### Simplified fallback scene
 
-The selected timeline minute drives `getSceneState()` in `scene.mjs`. Both towers
-begin intact; North is impacted at 08:46, South at 09:03, South is collapsed at
-09:59, and North at 10:28 (September 11, 2001, EDT). These intentionally rounded
-anchors match the existing timeline, not second-level event timestamps. Scrubbing
-backward restores earlier states. Evidence filters and the evidence time window
-do not change the scene clock. The reconstruction toggle hides all scene layers.
+The selected historical second drives `getSceneState()` in `scene.mjs`. Both
+renderers and the timeline anchors share one set of NIST event times: North impact
+08:46:30, South impact 09:02:59, South collapse initiation 09:58:59 and North collapse
+initiation 10:28:22 (September 11, 2001, EDT). NIST estimates approximately one-second
+accuracy for these events. Other sources can use different time conventions; this
+choice does not retime the evidence records. Scrubbing backward restores earlier
+states. Evidence filters and the time window do not change the scene clock.
 
 Standing towers use the existing footprints and heights. Thin dark patches mark
 the approximate north face / floors 93–99 of North and south face / floors 77–85
@@ -129,9 +130,35 @@ Run scene boundary, geometry, and reverse-scrub checks with:
 node --test apps/web-explorer/scene.test.mjs
 ```
 
-This is not yet the final public product. The current Twin Towers are lightweight
-geographic extrusions intended to establish the historical-atlas camera, scale, and
-site placement. Detailed GLB/Three.js architecture can replace them without changing
-the evidence model. The explorer does not currently provide story threads, full
-camera frustums, authentication, or reviewer actions. Those should be added only after the first
-mixed real corpus shows which read-model fields are stable enough to expose.
+### Geographic and architectural references
+
+`references/memorial-pools.geojson` preserves the OSM North/South Pool polygons
+(ways 697722178 and 697722181, version 9, retrieved 2026-09-19). Their polygon
+centers and edge orientation provide approximate geographic registration. The
+Memorial describes the pools as sitting within the former tower footprints:
+[Memorial reference](https://www.911memorial.org/visit/memorial/about-memorial).
+This is not a survey, and the pool dimensions are not reused as tower dimensions.
+Both renderers share the derived centers and -29.117° local-axis rotation.
+The geographic data are © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright).
+
+The detailed model uses approximately 3 m diagonal corner bevels, 59 flat-face
+column lines at 1.016 m spacing, and mechanical bands associated with floors 7–8,
+41–42, 75–76 and 108–109. References: [NIST NCSTAR 1, Table 1–1 and tower description](https://nvlpubs.nist.gov/nistpubs/Legacy/NCSTAR/ncstar1.pdf)
+and [NIST structural interim report](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication1000-5v5.pdf).
+Floor elevations are still normalized across the total model height, not extracted
+from architectural elevation drawings. Roof details, impact-hole contours and the
+plaza remain approximate. Reduced façade contrast limits distant aliasing.
+
+[Timing source: NIST visual evidence paper, p. 3](https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=100911).
+The interface exposes these references in “Reconstruction sources & limits”.
+
+Upper structural sections now retain full scale while separating; they no longer
+shrink as a visual proxy for breakup. Roof details follow their section. The
+motion curves and particle trajectories remain authored approximations. Soft
+camera-facing density patches replace the previous spherical smoke/dust volumes;
+these atmospheric shapes and fade rates have not been calibrated to footage.
+
+Further accuracy work needs reviewed architectural elevations, precisely timed
+camera views for motion comparison, and a sourced North Tower collapse sequence.
+The Explorer does not currently provide story threads, full camera frustums,
+authentication, or reviewer actions.
