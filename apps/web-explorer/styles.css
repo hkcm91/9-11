@@ -1,0 +1,199 @@
+:root {
+  color-scheme: dark;
+  --bg: #111315;
+  --panel: #191c1f;
+  --panel-2: #202428;
+  --line: #343a40;
+  --text: #f1f3f4;
+  --muted: #aeb5bc;
+  --accent: #d7c6a5;
+  --proposed: #d6a85f;
+  --reviewed: #7aa2c8;
+  --verified: #79aa8c;
+  --disputed: #bb7777;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+body { min-height: 100vh; overflow: hidden; }
+
+button, input, select { font: inherit; }
+button, select, input[type="search"] {
+  color: var(--text);
+  background: #14171a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+button { cursor: pointer; }
+
+.topbar {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #0d0f11;
+}
+.topbar h1, .panel h2, .record-tray h2, .detail-panel h2 { margin: 0; }
+.topbar h1 { font-size: 20px; font-weight: 650; letter-spacing: .01em; }
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .14em;
+  font-weight: 700;
+}
+.status { color: var(--muted); font-size: 13px; text-align: right; }
+
+.layout {
+  height: calc(100vh - 72px);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 330px;
+}
+
+.sidebar, .detail-panel {
+  overflow: auto;
+  background: var(--panel);
+}
+.sidebar { border-right: 1px solid var(--line); }
+.detail-panel { border-left: 1px solid var(--line); padding: 18px; }
+
+.panel { padding: 16px; border-bottom: 1px solid var(--line); }
+.section-heading, .tray-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.timeline-panel h2 { font-size: 26px; font-variant-numeric: tabular-nums; }
+.quiet-button { padding: 6px 9px; color: var(--muted); font-size: 12px; }
+#timeline { width: 100%; margin: 18px 0 5px; accent-color: var(--accent); }
+.timeline-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+
+.field { display: grid; gap: 7px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+.field select, .field input[type="search"] { width: 100%; padding: 8px; }
+.field input[type="range"] { width: 100%; accent-color: var(--accent); }
+.toggle { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; color: var(--muted); font-size: 12px; }
+.toggle input { margin-top: 2px; accent-color: var(--accent); }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.stat-grid div {
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.stat-grid strong { display: block; font-size: 19px; }
+.stat-grid span { color: var(--muted); font-size: 11px; }
+
+.legend-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; color: var(--muted); font-size: 12px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--proposed); }
+.legend-dot.reviewed { background: var(--reviewed); }
+.legend-dot.verified { background: var(--verified); }
+.legend-dot.disputed { background: var(--disputed); }
+.fine-print { color: #899198; font-size: 11px; line-height: 1.5; margin: 14px 0 0; }
+
+.workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(280px, 58%) minmax(0, 42%);
+  background: #101214;
+}
+#map { min-height: 280px; background: #171a1d; }
+.leaflet-container { font-family: inherit; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #202428;
+  color: var(--text);
+}
+.leaflet-popup-content { margin: 11px 13px; }
+.map-popup strong { display: block; margin-bottom: 4px; }
+.map-popup span { color: var(--muted); font-size: 12px; }
+
+.record-tray { min-height: 0; padding: 14px 16px 18px; border-top: 1px solid var(--line); overflow: hidden; }
+.record-tray h2 { font-size: 16px; }
+#search { width: min(340px, 48%); padding: 8px 10px; }
+.record-list {
+  margin-top: 12px;
+  height: calc(100% - 48px);
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+.record-card {
+  min-height: 112px;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  background: var(--panel);
+  transition: border-color .15s ease, background .15s ease;
+}
+.record-card:hover, .record-card.selected { border-color: #6f7479; background: var(--panel-2); }
+.record-card-time, .record-card-meta, .record-card-claim { color: var(--muted); font-size: 11px; }
+.record-card-title { font-size: 13px; line-height: 1.35; }
+.record-card-claim { display: inline-flex; align-items: center; gap: 5px; }
+
+.detail-empty { color: var(--muted); line-height: 1.6; }
+.detail-panel h2 { font-size: 20px; line-height: 1.25; margin-bottom: 8px; }
+.detail-section { padding: 14px 0; border-top: 1px solid var(--line); }
+.detail-section:first-of-type { border-top: 0; }
+.detail-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 5px; }
+.detail-value { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.claim-box {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.claim-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 9px; font-size: 12px; }
+.claim-grid dt { color: var(--muted); }
+.claim-grid dd { margin: 0; }
+.source-link { color: var(--accent); }
+.status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(214, 168, 95, .16);
+  color: #edc98e;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.status-badge.reviewed { background: rgba(122, 162, 200, .16); color: #a9c9e8; }
+.status-badge.verified { background: rgba(121, 170, 140, .16); color: #a8d0b7; }
+.status-badge.disputed { background: rgba(187, 119, 119, .16); color: #dda2a2; }
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 250px minmax(0, 1fr); }
+  .detail-panel {
+    position: fixed;
+    z-index: 1000;
+    right: 0;
+    top: 72px;
+    bottom: 0;
+    width: min(360px, 90vw);
+    box-shadow: -12px 0 32px rgba(0,0,0,.35);
+    transform: translateX(100%);
+    transition: transform .2s ease;
+  }
+  .detail-panel.open { transform: translateX(0); }
+}
+
+@media (max-width: 720px) {
+  body { overflow: auto; }
+  .topbar { height: auto; min-height: 72px; }
+  .layout { height: auto; display: block; }
+  .sidebar { border-right: 0; }
+  .workspace { height: 850px; }
+  .sidebar .summary-panel, .sidebar .legend-panel { display: none; }
+  .record-list { grid-template-columns: 1fr; }
+  #search { width: 52%; }
+}

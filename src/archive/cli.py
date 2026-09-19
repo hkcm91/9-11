@@ -57,12 +57,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sample_911da = subparsers.add_parser("sample-911da", help="Sample metadata from the September 11 Digital Archive")
     _add_output_args(sample_911da, default_delay=1.0)
-    sample_911da.add_argument("--collection", type=int, default=None)
+    sample_911da.add_argument("--collection", dest="source_collection_id", type=int, default=None)
     sample_911da.add_argument("--details", action="store_true", help="Enrich each record with Dublin Core XML metadata")
 
     sample_ia = subparsers.add_parser("sample-internet-archive", help="Sample Internet Archive Understanding 9/11 metadata")
     _add_output_args(sample_ia, default_delay=0.5)
-    sample_ia.add_argument("--collection", default="911")
+    sample_ia.add_argument("--collection", dest="ia_collection", default="911")
     sample_ia.add_argument("--details", action="store_true", help="Fetch full item metadata and summarize files")
 
     sample_nist = subparsers.add_parser("sample-nist", help="Inventory public NIST WTC repository entry points")
@@ -279,13 +279,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sample-911da":
         adapter = September11DigitalArchiveAdapter(request_delay_s=args.delay)
-        records = adapter.sample(limit=args.limit, collection_id=args.collection, enrich=args.details)
+        records = adapter.sample(limit=args.limit, collection_id=args.source_collection_id, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")
         return 0
 
     if args.command == "sample-internet-archive":
-        adapter = InternetArchiveAdapter(collection=args.collection, request_delay_s=args.delay)
+        adapter = InternetArchiveAdapter(collection=args.ia_collection, request_delay_s=args.delay)
         records = adapter.sample(limit=args.limit, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")

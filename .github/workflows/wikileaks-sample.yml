@@ -27,7 +27,7 @@ on:
 
 jobs:
   sample:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
@@ -36,8 +36,8 @@ jobs:
       TYPESAFE_API_AUTH_HEADER: ${{ vars.TYPESAFE_API_AUTH_HEADER }}
       TYPESAFE_API_AUTH_PREFIX: ${{ vars.TYPESAFE_API_AUTH_PREFIX }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install -e .
@@ -185,7 +185,7 @@ jobs:
               raise SystemExit("; ".join(failures))
           PY
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wikileaks-sample
           path: artifacts/
