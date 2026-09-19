@@ -168,6 +168,30 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 .map-popup strong { display: block; margin-bottom: 4px; max-width: 260px; font-size: 12px; }
 .map-popup span { color: var(--muted); font-size: 10px; }
 
+.evidence-map-marker {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--marker-status, var(--proposed));
+  border-radius: 50%;
+  background: rgba(17,21,24,.9);
+  color: #e7dfd0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  font-size: 9px;
+  line-height: 1;
+  transition: width .12s ease, height .12s ease, transform .12s ease;
+}
+.evidence-map-marker.selected {
+  width: 30px;
+  height: 30px;
+  transform: translate(-3px, -3px);
+  border-width: 3px;
+  background: #181c1f;
+  box-shadow: 0 0 0 4px rgba(234,218,184,.12), 0 4px 12px rgba(0,0,0,.42);
+  font-size: 11px;
+}
+
 .map-title-card, .map-note {
   position: absolute;
   z-index: 500;
