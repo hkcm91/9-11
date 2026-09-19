@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from archive.query import ArchiveQuery
 
@@ -101,6 +102,132 @@ def _claim_summary(
     return {field: claim.get(field) for field in fields if claim.get(field) is not None}
 
 
+def _https_url(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped if stripped.startswith("https://") else None
+
+
+def _media_kind(content_type: str | None, name: str | None = None) -> str | None:
+    content = str(content_type or "").lower()
+    lower_name = str(name or "").lower()
+    if content.startswith("image/") or lower_name.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+        return "image"
+    if content.startswith("video/") or lower_name.endswith((".mp4", ".webm", ".m4v", ".mov", ".ogv")):
+        return "video"
+    if content.startswith("audio/") or lower_name.endswith((".mp3", ".wav", ".m4a", ".flac", ".ogg")):
+        return "audio"
+    return None
+
+
+def _media_descriptor(record: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a source-hosted media preview descriptor without mirroring bytes."""
+
+    metadata = record.get("metadata_raw")
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    sensitivity = metadata.get("sensitivity_flags")
+    sensitivity = sensitivity if isinstance(sensitivity, dict) else {}
+    sensitive_reasons = [
+        str(key).replace("_", " ")
+        for key, value in sensitivity.items()
+        if value is True
+    ]
+
+    attachments = metadata.get("media_attachments")
+    if isinstance(attachments, list):
+        ranked: list[tuple[int, dict[str, Any], str]] = []
+        priority = {"image": 0, "video": 1, "audio": 2}
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+            url = _https_url(attachment.get("url"))
+            kind = _media_kind(
+                str(attachment.get("content_type") or ""),
+                str(attachment.get("name") or ""),
+            )
+            if url and kind:
+                ranked.append((priority[kind], attachment, kind))
+        if ranked:
+            _, attachment, kind = sorted(ranked, key=lambda value: value[0])[0]
+            url = _https_url(attachment.get("url"))
+            return {
+                "kind": kind,
+                "url": url,
+                "thumbnail_url": url if kind == "image" else None,
+                "name": attachment.get("name"),
+                "host": "archDisk / ArcGIS",
+                "remote": True,
+                "sensitive": bool(sensitive_reasons),
+                "sensitivity_reasons": sensitive_reasons,
+            }
+
+    source_id = str(record.get("source_id") or "")
+    source_item_id = str(record.get("source_item_id") or "")
+
+    if source_id == "internet-archive-understanding-911" and source_item_id:
+        encoded_id = quote(source_item_id, safe="")
+        thumbnail_url = f"https://archive.org/services/img/{encoded_id}"
+        summary = metadata.get("_file_summary")
+        primary_files = summary.get("primary_media_files") if isinstance(summary, dict) else None
+        if isinstance(primary_files, list):
+            candidates: list[tuple[int, str, str]] = []
+            for name in primary_files:
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                kind = _media_kind(None, name)
+                if kind not in {"video", "audio"}:
+                    continue
+                extension_priority = 0 if name.lower().endswith((".mp4", ".webm")) else 1
+                candidates.append((extension_priority, name, kind))
+            if candidates:
+                _, name, kind = sorted(candidates, key=lambda value: (value[0], value[1]))[0]
+                return {
+                    "kind": kind,
+                    "url": f"https://archive.org/download/{encoded_id}/{quote(name, safe='')}",
+                    "thumbnail_url": thumbnail_url,
+                    "name": name,
+                    "host": "Internet Archive",
+                    "remote": True,
+                    "sensitive": False,
+                    "sensitivity_reasons": [],
+                }
+        return {
+            "kind": "external",
+            "thumbnail_url": thumbnail_url,
+            "name": record.get("title_raw"),
+            "host": "Internet Archive",
+            "remote": True,
+            "sensitive": False,
+            "sensitivity_reasons": [],
+        }
+
+    if source_id == "nist-wtc-organized-media":
+        drive_id = metadata.get("drive_file_id") or metadata.get("Drive File ID")
+        if isinstance(drive_id, str) and drive_id.strip():
+            kind = _media_kind(None, record.get("title_raw")) or (
+                "image" if str(record.get("media_type_raw") or "").lower() == "photo" else "external"
+            )
+            descriptor: dict[str, Any] = {
+                "kind": kind,
+                "name": record.get("title_raw"),
+                "host": "NIST / Google Drive",
+                "remote": True,
+                "sensitive": False,
+                "sensitivity_reasons": [],
+                "preview_only": True,
+            }
+            if kind == "image":
+                descriptor["thumbnail_url"] = (
+                    f"https://drive.google.com/thumbnail?id={quote(drive_id.strip(), safe='')}&sz=w1200"
+                )
+            return descriptor
+
+    return None
+
+
 def build_explorer_payload(
     database: Path | str,
     *,
@@ -184,6 +311,7 @@ def build_explorer_payload(
                     "collection": record.get("collection_raw"),
                     "media_type": record.get("media_type_raw"),
                     "rights": record.get("rights_raw"),
+                    "media": _media_descriptor(record),
                     "time": _claim_summary(
                         temporal,
                         (
@@ -230,7 +358,7 @@ def build_explorer_payload(
         )
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now().astimezone().isoformat(),
         "window": {"start": start.isoformat(), "end": end.isoformat()},
         "min_confidence": min_confidence,
