@@ -4,6 +4,8 @@ import { getSceneState, SCENE_LAYERS, updateSceneSources } from "./scene.mjs";
 
 import { timeBounds, matchesHistoricalTime, summarizeTimes } from "./evidence-time.mjs";
 
+import { sampleReplay } from "./replay.mjs";
+
 const DATA_URL = "./data/explorer.json";
 
 const EVENT_ANCHORS = [
@@ -47,6 +49,8 @@ const state = {
   map: null,
   mapReady: false,
   sceneKey: null,
+  detailedScene: null,
+  playbackFrame: null,
 };
 
 const el = (id) => document.getElementById(id);
@@ -60,6 +64,10 @@ const confidenceValueEl = el("confidence-value");
 const untimedEl = el("untimed-toggle");
 const searchEl = el("search");
 const detailEl = el("detail");
+
+function sceneZoom() {
+  return MAP_HOME.zoom + Math.min(0, Math.log2(Math.max(280, el("map").clientHeight) / 700));
+}
 
 function parseTime(value) {
   return value ? new Date(value) : null;
@@ -283,7 +291,7 @@ function addHistoricalLayers() {
         ["get", "min_height"],
         0,
       ],
-      "fill-extrusion-opacity": 0.58,
+      "fill-extrusion-opacity": 0.28,
       "fill-extrusion-vertical-gradient": true,
     },
   };
@@ -412,9 +420,25 @@ function updateLayerVisibility() {
   );
   setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
   setLayerVisibility(
-    SCENE_LAYERS,
+    SCENE_LAYERS.filter(id => !state.detailedScene || id === "historical-wtc-labels"),
     el("wtc3d-toggle").checked,
   );
+}
+
+async function loadDetailedScene() {
+  try {
+    const { createTowerLayer } = await import("./tower-layer.mjs");
+    const layer = createTowerLayer(maplibregl);
+    state.map.addLayer(layer, "historical-wtc-labels");
+    state.detailedScene = layer;
+    setLayerVisibility(SCENE_LAYERS.filter(id => id !== "historical-wtc-labels"), false);
+    el("reconstruction-status").textContent = "Detailed reconstruction · illustrative motion";
+    state.sceneKey = null;
+    updateHistoricalScene();
+  } catch (error) {
+    console.warn("Detailed reconstruction unavailable; keeping simplified scene", error);
+    el("reconstruction-status").textContent = "Simplified reconstruction · detailed renderer unavailable";
+  }
 }
 
 function initMap() {
@@ -422,7 +446,7 @@ function initMap() {
     container: "map",
     style: MAP_STYLE,
     center: MAP_HOME.center,
-    zoom: MAP_HOME.zoom,
+    zoom: sceneZoom(),
     minZoom: 12,
     maxZoom: 19,
     pitch: MAP_HOME.pitch,
@@ -438,6 +462,7 @@ function initMap() {
     stylizeBasemap();
     addHistoricalLayers();
     state.mapReady = true;
+    void loadDetailedScene();
     updateHistoricalScene();
     updateLayerVisibility();
     renderHeading();
@@ -453,8 +478,10 @@ function configureTimeline() {
   const end = parseTime(state.payload.window.end);
   const totalMinutes = Math.max(1, minutesBetween(start, end));
   timelineEl.min = "0";
-  timelineEl.max = String(totalMinutes);
+  timelineEl.max = String(Math.max(1, Math.round((end - start) / 1000)));
   timelineEl.value = "0";
+  const sequenceStart = new Date("2001-09-11T09:58:55-04:00");
+  el("south-sequence").disabled = sequenceStart < start || sequenceStart > end;
   el("time-start").textContent = fmtShort(start);
   el("time-end").textContent = fmtShort(end);
   renderEventAnchors(start, end);
@@ -510,17 +537,29 @@ function renderDensity(start, end, totalMinutes) {
 
 function currentHistoricalTime() {
   const start = parseTime(state.payload.window.start);
-  return new Date(start.getTime() + Number(timelineEl.value) * 60000);
+  return new Date(start.getTime() + Number(timelineEl.value) * 1000);
 }
 
 function updateHistoricalScene() {
   if (!state.payload) return;
-  const scene = getSceneState(currentHistoricalTime());
+  const time = currentHistoricalTime();
+  const motion = el("scene-motion").checked;
+  const scene = getSceneState(time);
+  const replay = sampleReplay(time, motion);
+  if (state.detailedScene) scene.south = replay.south.status;
+  state.detailedScene?.setTime(time, { motion, visible: el("wtc3d-toggle").checked });
   const key = `${scene.north}/${scene.south}`;
-  const descriptions = { intact: "intact", impacted: "impact damage / smoke", collapsed: "collapsed / debris" };
+  const descriptions = { intact: "intact", impacted: "impact damage / smoke", collapsed: "collapsed / debris", collapsing: "collapse sequence (approx.)" };
   el("scene-status").textContent = `North: ${descriptions[scene.north]} · South: ${descriptions[scene.south]}`;
   if (!state.mapReady || key === state.sceneKey) return;
-  updateSceneSources(state.map, scene);
+  updateSceneSources(state.map, getSceneState(time));
+  if (scene.south === "collapsing") {
+    const labels = { type: "FeatureCollection", features: [
+      { type: "Feature", properties: { label: "NORTH TOWER · IMPACTED" }, geometry: { type: "Point", coordinates: [-74.01337,40.71273] } },
+      { type: "Feature", properties: { label: "SOUTH TOWER · COLLAPSE SEQUENCE" }, geometry: { type: "Point", coordinates: [-74.01339,40.71173] } },
+    ] };
+    state.map.getSource("wtc-labels").setData(labels);
+  }
   state.sceneKey = key;
 }
 
@@ -889,16 +928,67 @@ function selectItem(id, focusMap) {
 }
 
 function setTimelineToIso(value) {
+  pausePlayback();
   const target = parseTime(value);
   const start = parseTime(state.payload.window.start);
   const end = parseTime(state.payload.window.end);
   if (!target || target < start || target > end) return;
-  timelineEl.value = String(minutesBetween(start, target));
+  timelineEl.value = String(Math.round((target - start) / 1000));
   applyFilters();
 }
 
+function pausePlayback() {
+  if (state.playbackFrame !== null) cancelAnimationFrame(state.playbackFrame);
+  state.playbackFrame = null;
+  el("play-timeline").textContent = "Play";
+  el("play-timeline").setAttribute("aria-pressed", "false");
+  if (state.payload) updateClock();
+}
+
+function playTimeline() {
+  if (!state.payload) return;
+  if (state.playbackFrame !== null) { pausePlayback(); return; }
+  if (Number(timelineEl.value) >= Number(timelineEl.max)) return;
+  let previous = performance.now(), cursor = Number(timelineEl.value);
+  el("play-timeline").textContent = "Pause";
+  el("play-timeline").setAttribute("aria-pressed", "true");
+  const tick = now => {
+    const elapsed = Math.min((now - previous) / 1000, .25);
+    previous = now;
+    cursor = Math.min(Number(timelineEl.max), cursor + elapsed * Number(el("play-speed").value));
+    if (Math.floor(cursor) !== Number(timelineEl.value)) {
+      timelineEl.value = String(Math.floor(cursor));
+      applyFilters();
+    }
+    // Subsecond rendering uses the same historical cursor; evidence refreshes each second.
+    if (state.detailedScene) {
+      const time = new Date(Date.parse(state.payload.window.start) + cursor * 1000);
+      state.detailedScene.setTime(time, { motion: el("scene-motion").checked, visible: el("wtc3d-toggle").checked });
+    }
+    if (cursor >= Number(timelineEl.max)) { pausePlayback(); return; }
+    state.playbackFrame = requestAnimationFrame(tick);
+  };
+  state.playbackFrame = requestAnimationFrame(tick);
+}
+
 function wireControls() {
-  timelineEl.addEventListener("input", applyFilters);
+  el("scene-motion").checked = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el("play-timeline").addEventListener("click", playTimeline);
+  el("scene-motion").addEventListener("change", () => { pausePlayback(); updateHistoricalScene(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pausePlayback(); });
+  for (const [id, delta] of [["step-back", -1], ["step-forward", 1]]) {
+    el(id).addEventListener("click", () => {
+      pausePlayback();
+      timelineEl.value = String(Math.max(0, Math.min(Number(timelineEl.max), Number(timelineEl.value) + delta)));
+      applyFilters();
+    });
+  }
+  el("south-sequence").addEventListener("click", () => {
+    pausePlayback();
+    setTimelineToIso("2001-09-11T09:58:55-04:00");
+    state.map.flyTo({ center: [-74.0130,40.7140], zoom: sceneZoom(), pitch: 58, bearing: -25, duration: 0 });
+  });
+  timelineEl.addEventListener("input", () => { pausePlayback(); applyFilters(); });
   el("window-size").addEventListener("change", applyFilters);
   mediaFilterEl.addEventListener("change", applyFilters);
   confidenceEl.addEventListener("input", () => {
@@ -909,15 +999,17 @@ function wireControls() {
   searchEl.addEventListener("input", applyFilters);
   el("footprint-toggle").addEventListener("change", updateLayerVisibility);
   el("buildings-toggle").addEventListener("change", updateLayerVisibility);
-  el("wtc3d-toggle").addEventListener("change", updateLayerVisibility);
+  el("wtc3d-toggle").addEventListener("change", () => { updateLayerVisibility(); updateHistoricalScene(); });
   el("heading-toggle").addEventListener("change", renderHeading);
 
   el("reset-time").addEventListener("click", () => {
+    pausePlayback();
     timelineEl.value = "0";
     applyFilters();
   });
 
   el("reset-view").addEventListener("click", () => {
+    pausePlayback();
     timelineEl.value = "0";
     mediaFilterEl.value = "all";
     confidenceEl.value = "0";
@@ -928,7 +1020,7 @@ function wireControls() {
     detailEl.classList.remove("open");
     state.map.flyTo({
       center: MAP_HOME.center,
-      zoom: MAP_HOME.zoom,
+      zoom: sceneZoom(),
       pitch: MAP_HOME.pitch,
       bearing: MAP_HOME.bearing,
       duration: 650,

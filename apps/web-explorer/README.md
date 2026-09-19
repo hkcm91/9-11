@@ -59,7 +59,46 @@ new HTML cannot accidentally run a previously cached, pre-collapse Explorer app.
 
 ## Intentional limits
 
-### Time-aware WTC scene
+### Detailed reconstruction and South Tower replay
+
+The default renderer now uses a Three.js custom MapLibre layer (`tower-layer.mjs`)
+with locally generated, meter-based models: façade ribs and floor lines, mechanical
+bands, roof equipment, a North Tower antenna, localized impact patches, a neutral
+plaza surface, and rubble. No downloaded model, Blender runtime, or model license
+is required. Geometry is a stylized architectural approximation, not a surveyed
+building model. The existing simplified MapLibre scene remains the automatic
+fallback if the detailed renderer cannot load.
+
+The timeline has one-second resolution. Play/Pause advances the same historical
+cursor used by evidence filtering, with 1×, 10× and 60× speed options. ±1s controls
+and “Inspect South Tower sequence” support close inspection. Scrubbing, resetting,
+changing reconstructed-motion mode, or leaving the browser tab pauses playback.
+Playback stops at the timeline end and never loops or starts automatically.
+Reduced-motion preferences default reconstructed motion off.
+
+`replay.mjs` samples fixed authored poses over an **illustrative 12-second South
+Tower sequence beginning at the existing rounded 09:59:00 EDT anchor**. Upper
+section descent/tilt, progressive removal of lower sections, façade fragments,
+and dust are deterministic functions of historical time. These are animation
+parameters, not measured trajectories, a physical simulation, or a footage-
+calibrated reconstruction. The North Tower still changes directly to rubble at
+10:28; a detailed North Tower collapse sequence is deferred.
+
+Smoke samples use fixed seeds and historical time rather than accumulated particle
+state. Dust expands and thins over an illustrative five minutes. Pausing stops
+motion; reverse seeking restores the same geometry and atmospheric state. With
+reconstructed motion disabled, collapse uses the discrete states and atmospheric
+forms stay spatially fixed. The reconstruction toggle hides the whole custom layer.
+
+Historical reference: [NIST investigation scope](https://www.nist.gov/world-trade-center-investigation/about-investigation).
+Rendering integration: [MapLibre Three.js custom layer](https://maplibre.org/maplibre-gl-js/docs/examples/add-a-3d-model-using-threejs/).
+NIST's engineering investigation is not reproduced by this visualization. Future
+work includes comparison against properly timed footage, reviewed motion curves,
+more accurate plaza/context models, and detailed North Tower motion.
+
+Run all scene, replay and time-filter checks with `node --test apps/web-explorer/*.test.mjs`.
+
+### Simplified fallback scene
 
 The selected timeline minute drives `getSceneState()` in `scene.mjs`. Both towers
 begin intact; North is impacted at 08:46, South at 09:03, South is collapsed at
@@ -77,10 +116,10 @@ and [NIST December 2003 report](https://tsapps.nist.gov/publication/get_pdf.cfm?
 
 Smoke uses static translucent polygon volumes at impact height. Collapsed states
 replace the tower and antenna with low debris and light ground-level dust.
-These are symbolic state indicators, not measured damage, plume direction,
+In the fallback, these are symbolic state indicators, not measured damage, plume direction,
 dispersion, debris extent, or a collapse simulation. Dust persists as a collapsed
 state cue; it does not claim a constant historical dust concentration. There are
-no flames, disaster animation loops, extra timers, or transition animations.
+no flames or transition animations in the fallback renderer.
 Nearby buildings remain modern context. Detailed plaza geometry, façade models,
 atmospheric refinement and optional subtle transitions are deferred.
 

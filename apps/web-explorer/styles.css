@@ -373,10 +373,16 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 #moment-summary { color: var(--muted); font-size: 10px; }
-.timeline-controls { display: flex; gap: 8px; align-items: flex-end; }
+.timeline-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .timeline-controls label { display: grid; gap: 4px; color: var(--muted-2); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
 .timeline-controls select, .secondary-button { padding: 6px 8px; font-size: 10px; }
 .secondary-button { color: var(--muted); }
+#play-timeline[aria-pressed="true"] { color: var(--accent-bright); }
+@media (max-width: 1200px) {
+  .timeline-toolbar { gap: 8px; }
+  .timeline-time-row { display: block; }
+  .timeline-controls { gap: 4px; max-width: 330px; }
+}
 
 .historical-timeline {
   position: relative;

@@ -79,6 +79,8 @@ jobs:
           cp apps/web-explorer/app.js _site/
           cp apps/web-explorer/scene.mjs _site/
           cp apps/web-explorer/evidence-time.mjs _site/
+          cp apps/web-explorer/replay.mjs _site/
+          cp apps/web-explorer/tower-layer.mjs _site/
           cp /tmp/phase0-scale/explorer/data/explorer.json _site/data/
           touch _site/.nojekyll
 
@@ -96,7 +98,7 @@ jobs:
           import os
           import re
           from pathlib import Path
-          for name in ("index.html", "app.js"):
+          for name in ("index.html", "app.js", "tower-layer.mjs", "replay.mjs"):
               path = Path("_site") / name
               text = path.read_text(encoding="utf-8")
               text = re.sub(r'(\./[\w-]+\.(?:js|mjs|css))(?:\?v=[\w-]+)?',

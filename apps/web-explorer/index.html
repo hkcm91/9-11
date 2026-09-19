@@ -84,7 +84,10 @@
           <input id="wtc3d-toggle" type="checkbox" checked>
           <span>Historical Twin Towers reconstruction</span>
         </label>
-        <p class="fine-print">Approximate historical reconstruction at the selected minute. Damage zones, smoke and debris are illustrative; surrounding city geometry is modern.</p>
+        <label class="toggle"><input id="scene-motion" type="checkbox" checked><span>Reconstructed motion</span></label>
+        <p id="reconstruction-status" class="fine-print" role="status">Loading detailed reconstruction…</p>
+        <button id="south-sequence" class="secondary-button" type="button" disabled>Inspect South Tower sequence</button>
+        <p class="fine-print">Approximate historical reconstruction at the selected time. South Tower motion is an illustrative 12-second sequence at the rounded 9:59 anchor, not a validated physical simulation. Damage zones, smoke and debris are illustrative; surrounding city geometry is modern.</p>
       </section>
 
       <section class="control-section legend-section">
@@ -136,6 +139,10 @@
           </div>
         </div>
         <div class="timeline-controls">
+          <button type="button" id="step-back" class="secondary-button" aria-label="Back one second">−1s</button>
+          <button type="button" id="play-timeline" class="secondary-button" aria-pressed="false">Play</button>
+          <button type="button" id="step-forward" class="secondary-button" aria-label="Forward one second">+1s</button>
+          <label><span>Speed</span><select id="play-speed" aria-label="Playback speed"><option value="1">1×</option><option value="10">10×</option><option value="60">60×</option></select></label>
           <label>
             <span>Window</span>
             <select id="window-size">
