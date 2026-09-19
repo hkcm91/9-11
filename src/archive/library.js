@@ -140,7 +140,8 @@ async function search(reset = true) {
       const card = el('div', undefined, 'card');
       card.append(el('div', releaseLabel(row), 'eyebrow'));
       const heading = el('h2');
-      heading.append(link(row.title, '#doc=' + row.id + '&page=' + row.page));
+      heading.append(link(row.display_title || row.title, '#doc=' + row.id + '&page=' + row.page));
+      if (row.display_title && row.display_title !== row.title) card.append(el('div', row.title, 'meta'));
       card.append(heading, el('div', 'Page ' + row.page + ' · ' + (row.extraction_status === 'indexed' ? 'Preserved text' : row.extraction_status.replaceAll('_', ' ')), 'meta'), highlighted(row.excerpt));
       $('results').append(card);
     }
@@ -177,7 +178,7 @@ async function read() {
       api('/api/documents/' + encodeURIComponent(id) + '/pages/' + number),
     ]);
     if (generation !== readerGeneration) return;
-    box.replaceChildren(el('div', doc.collection.replaceAll('_', ' '), 'eyebrow'), el('h2', doc.title),
+    box.replaceChildren(el('div', doc.collection.replaceAll('_', ' '), 'eyebrow'), el('h2', doc.display_title || doc.title),
       el('p', releaseLabel(doc) + ' · ' + doc.page_count + ' pages · Retrieved ' + doc.retrieved_at.slice(0, 10), 'meta'));
     const source = link('Original source', doc.source_url);
     if (doc.format === 'warlog_html') box.append(el('p', 'Published War Diary narrative. Redactions in the publisher’s text are preserved.', 'meta'));
@@ -190,6 +191,11 @@ async function read() {
     const details = el('details');
     details.append(el('summary', 'Source integrity'), el('p', 'SHA-256: ' + doc.sha256, 'meta'));
     box.append(details);
+    if (doc.display_title && doc.display_title !== doc.title) box.append(el('p', 'Source subject heading · Original identifier: ' + doc.title, 'meta'));
+    const digestPanel = el('details');
+    digestPanel.append(el('summary', 'Reading brief & noteworthy passages'));
+    const digestBody = el('div'); digestPanel.append(digestBody); box.append(digestPanel);
+    mountDigest(doc, digestBody);
     const navigation = el('form', undefined, 'page-nav');
     navigation.setAttribute('aria-label', 'Page navigation');
     const previous = el('button', 'Previous');
@@ -480,3 +486,39 @@ $('research-form').onsubmit = async event => {
   finally { researchBusy = false; $('research-run').disabled = false; }
 };
 researchHistory();
+
+async function mountDigest(doc, box) {
+  const content = el('div');
+  const status = el('p', '', 'meta');
+  const build = el('button', 'Create reading brief with Jev');
+  box.append(el('p', 'A readable title and exact source excerpts, including updates and conclusions. Jev checks the title; excerpts are not a generated whole-document summary.', 'meta'), build, status, content);
+  function render(brief) {
+    if (!brief) return;
+    build.textContent = 'Recheck reading brief (cached when unchanged)';
+    content.replaceChildren(el('h3', brief.title), el('p', brief.summary_kind, 'meta'),
+      el('p', 'Pages sampled: ' + brief.coverage.sampled_pages.join(', ') + ' of ' + brief.coverage.total_pages, 'meta'),
+      el('p', 'Jev title assessment: ' + brief.assessment.response.answer.replaceAll('_', ' ')
+        + ' · Model confidence: ' + Math.round(brief.assessment.response.confidence * 100) + '%'
+        + (brief.title_supported ? ' · Suggested reading title' : ' · Original title retained'), 'meta'),
+      link('Download formatted reading brief', '/api/documents/' + doc.id + '/brief'));
+    for (const passage of brief.passages) {
+      const quote = el('blockquote', passage.text); quote.style.whiteSpace = 'pre-wrap';
+      content.append(el('h4', passage.label), quote,
+        link('Read source · page ' + passage.page, pageLink(doc.id, passage.page)));
+    }
+    content.append(el('p', brief.limitations, 'meta'));
+  }
+  build.onclick = async () => {
+    build.disabled = true; status.textContent = 'Preparing source excerpts and checking the title with Jev…';
+    try {
+      const response = await fetch('/api/digest', {method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Archive-Request': '1'}, body: JSON.stringify({id: doc.id})});
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Reading brief unavailable.');
+      render(result); status.textContent = 'Reading brief saved. The preserved original is unchanged.';
+    } catch (error) { status.textContent = error.message; }
+    finally { build.disabled = false; }
+  };
+  try { render(await api('/api/documents/' + doc.id + '/digest')); }
+  catch { status.textContent = 'Saved brief could not be loaded. You can try creating it again.'; }
+}

@@ -134,7 +134,27 @@ redactions remain intact. This is the published narrative, not an unredacted
 military original. Other HTML layouts fail extraction rather than becoming empty
 documents. Original HTML is downloaded as an attachment, never embedded.
 
-## Jev investigator
+## Readable titles and reading briefs
+
+Search results and the reader display a source subject heading where one can be
+extracted reliably; the original identifier remains visible. Original downloads
+use a sanitized readable filename plus a document-ID suffix. Stored objects and
+their hashes, original metadata, and citations are unchanged.
+
+Open **Reading brief & noteworthy passages** in the reader to create a brief.
+It selects up to six text pages (opening, closing, and update/conclusion wording),
+and retains exact cited excerpts including late corrections. This is an extractive
+reading aid, not a generated whole-document summary. Jev evaluates whether the
+proposed title is supported by the excerpts; an uncertain or negative assessment
+keeps the original title in the brief. A supported suggestion is still unverified.
+Noteworthy passages use local wording markers, not model newsworthiness scoring.
+
+Briefs are cached and exportable as readable Markdown with page citations, source
+URL, original identifier, checksum and coverage limitations. Creating a new brief
+makes one Jev call; identical requests reuse the result. Withdrawn documents cannot
+be retrieved or exported. No bulk model processing occurs automatically.
+
+## Question-led investigations
 
 **Jev investigator** accepts a question, name, event, or specific claim. Choose
 relevance, supporting evidence, or conflicting evidence; optionally restrict the

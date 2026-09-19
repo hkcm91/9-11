@@ -30,7 +30,7 @@ def handler_for(database, objects, *, jev_factory=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path not in {"/api/compare", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
+            if self.path not in {"/api/compare", "/api/digest", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
                 return self.respond(404, {"error": "Not found"})
             # No cross-origin browser can initiate a paid call or write proposals.
             host = self.headers.get("Host", "")
@@ -47,6 +47,18 @@ def handler_for(database, objects, *, jev_factory=None):
                 if not 0 < length <= 4096:
                     return self.respond(413, {"error": "Invalid request size"})
                 values = json.loads(self.rfile.read(length))
+                if self.path == '/api/digest':
+                    from archive.library_digest import DocumentDigest
+                    if not isinstance(values, dict) or not isinstance(values.get('id'), str):
+                        raise ValueError('Choose a document')
+                    acquired = comparison_lock.acquire(blocking=False)
+                    if not acquired:
+                        return self.respond(429, {'error': 'Another Jev action is running. Try again shortly.'})
+                    provider, status = provider_status()
+                    if not status['configured']:
+                        return self.respond(503, {'error': status['message']})
+                    library = DocumentLibrary(database, objects)
+                    return self.respond(200, DocumentDigest(library).build(values['id'], provider))
                 if self.path == '/api/research':
                     from archive.library_research import ResearchDesk
                     if not isinstance(values, dict):
@@ -135,7 +147,8 @@ def handler_for(database, objects, *, jev_factory=None):
                     return self.respond(200, desk.history() if parsed.path == '/api/research' else desk.get(parsed.path.rsplit('/', 1)[-1]))
                 if parsed.path == "/api/search":
                     values = parse_qs(parsed.query)
-                    return self.respond(200, library.search(values.get("q", [""])[0], values.get("collection", [""])[0], offset=int(values.get("offset", ["0"])[0])))
+                    from archive.library_digest import decorate
+                    return self.respond(200, [decorate(library, row) for row in library.search(values.get("q", [""])[0], values.get("collection", [""])[0], offset=int(values.get("offset", ["0"])[0]))])
                 if parsed.path == "/api/inventory":
                     return self.respond(200, library.inventory_coverage())
                 if parsed.path == "/api/coverage":
@@ -144,8 +157,18 @@ def handler_for(database, objects, *, jev_factory=None):
                 if len(parts) in (3, 4, 5, 6) and parts[:2] == ["api", "documents"]:
                     doc = library.document(parts[2], include_pages=False)
                     if doc:
+                        from archive.library_digest import DocumentDigest, decorate, file_stem
+                        doc = decorate(library, doc)
                         if len(parts) == 3:
                             return self.respond(200, doc)
+                        if len(parts) == 4 and parts[3] == 'digest':
+                            return self.respond(200, DocumentDigest(library).get(doc['id']))
+                        if len(parts) == 4 and parts[3] == 'brief':
+                            briefs = DocumentDigest(library)
+                            brief = briefs.get(doc['id'])
+                            if not brief:
+                                return self.respond(404, {'error': 'Create a reading brief first'})
+                            return self.respond(200, briefs.markdown(doc['id']).encode('utf-8'), 'text/markdown; charset=utf-8', brief['filename'])
                         if len(parts) == 6 and parts[3] == "pages" and parts[5] == "image" and doc["format"] == "pdf":
                             number = int(parts[4])
                             if not library.page(parts[2], number):
@@ -169,7 +192,7 @@ def handler_for(database, objects, *, jev_factory=None):
                             self.send_header("Content-Type", "application/octet-stream")
                             self.send_header("Content-Length", str(path.stat().st_size))
                             extension = {"pdf": "pdf", "warlog_html": "html", "record": "json"}.get(doc["format"], "txt")
-                            self.send_header("Content-Disposition", f'attachment; filename="{doc["id"]}.{extension}"')
+                            self.send_header("Content-Disposition", f'attachment; filename="{file_stem(doc["display_title"], doc["id"])}.{extension}"')
                             self.send_header("X-Content-Type-Options", "nosniff")
                             self.send_header("Cache-Control", "no-store")
                             self.end_headers()

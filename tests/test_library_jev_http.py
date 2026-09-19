@@ -139,3 +139,21 @@ def test_research_endpoint_history_and_origin_gate(tmp_path):
             assert json.load(response)[0]['id'] == result['id']
         with urlopen(base + '/api/research/' + result['id']) as response:
             assert json.load(response)['findings'][0]['passages'][0]['text']
+
+
+def test_reading_brief_api_and_formatted_download(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, identifier, base, _):
+        request = Request(base + '/api/digest', data=json.dumps({'id': identifier}).encode(),
+            headers={'Content-Type': 'application/json', 'Origin': base, 'X-Archive-Request': '1'})
+        with urlopen(request) as response:
+            assert json.load(response)['original_title'] == 'Source'
+        with urlopen(base + '/api/documents/' + identifier + '/brief') as response:
+            assert response.headers['Content-Type'].startswith('text/markdown')
+            assert '.md' in response.headers['Content-Disposition']
+            assert b'First original passage' in response.read()
+        lib.publish(identifier, False, 'test', 'Withdraw')
+        for endpoint in ('brief', 'digest'):
+            with pytest.raises(HTTPError) as exc:
+                urlopen(base + '/api/documents/' + identifier + '/' + endpoint)
+            assert exc.value.code == 404
