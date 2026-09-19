@@ -186,6 +186,15 @@ def build_parser() -> argparse.ArgumentParser:
     graph_quality.add_argument("--markdown-output", type=Path, default=None)
     graph_quality.add_argument("--high-degree-threshold", type=int, default=20)
 
+    resolution_candidates = subparsers.add_parser(
+        "build-resolution-candidates",
+        help="Generate reviewable same-entity and same-event decision requests from a graph",
+    )
+    resolution_candidates.add_argument("--database", type=Path, required=True)
+    resolution_candidates.add_argument("--output", type=Path, required=True)
+    resolution_candidates.add_argument("--max-entity-pairs", type=int, default=500)
+    resolution_candidates.add_argument("--max-event-pairs", type=int, default=500)
+
     demo = subparsers.add_parser(
         "run-demo-pipeline",
         help="Run the synthetic demo_history corpus end-to-end through the generic engine",
@@ -416,6 +425,19 @@ def main(argv: list[str] | None = None) -> int:
             high_degree_threshold=args.high_degree_threshold,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "build-resolution-candidates":
+        from historical_engine.resolution_candidates import write_candidates
+
+        payload = write_candidates(
+            args.database,
+            args.output,
+            collection_id=collection.id,
+            max_entity_pairs=args.max_entity_pairs,
+            max_event_pairs=args.max_event_pairs,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
 
     if args.command == "run-demo-pipeline":

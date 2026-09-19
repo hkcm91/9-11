@@ -92,6 +92,11 @@ jobs:
             --json-output artifacts/reports/graph-quality.json \
             --markdown-output artifacts/reports/graph-quality.md \
             --high-degree-threshold 20
+          archive-ingest --collection wikileaks build-resolution-candidates \
+            --database artifacts/wikileaks.sqlite \
+            --output artifacts/reports/resolution-candidates.jsonl \
+            --max-entity-pairs 500 \
+            --max-event-pairs 500
 
       - name: Validate requested real-batch coverage
         env:
