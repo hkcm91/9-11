@@ -5,3 +5,8 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Local credentials / environment
+.env
+.env.*
+!.env.example

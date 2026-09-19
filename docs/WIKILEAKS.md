@@ -268,3 +268,75 @@ It cannot create a reviewed/verified graph edge.
 The existing `JevDecisionProvider` is the intended first real provider for this
 queue. A concrete Jev transport is deliberately not hard-coded until TypeSafe's
 early-access API documentation supplies a stable endpoint/request contract.
+
+
+## TypeSafe / Jev credentials
+
+Local development uses environment variables. The repository includes
+`.env.example`, while real `.env` files are ignored by Git.
+
+Create your local file:
+
+```bash
+cp .env.example .env
+```
+
+Then fill in:
+
+```dotenv
+TYPESAFE_API_KEY=your_real_key_here
+TYPESAFE_API_URL=the_exact_jev_endpoint_from_your_typesafe_console_or_docs
+
+# Only set these if TypeSafe's documentation requires them:
+TYPESAFE_API_AUTH_HEADER=
+TYPESAFE_API_AUTH_PREFIX=
+```
+
+Do not commit the real `.env` file.
+
+Check configuration without exposing the secret:
+
+```bash
+archive-ingest jev-config-check
+```
+
+Example safe output:
+
+```json
+{
+  "api_key_configured": true,
+  "api_url_configured": true,
+  "auth_header_configured": false,
+  "auth_prefix_configured": false,
+  "ready_for_transport": true
+}
+```
+
+The command never prints the API key or endpoint credentials.
+
+### GitHub Actions
+
+In the repository settings create:
+
+**Secret**
+
+- `TYPESAFE_API_KEY`
+
+**Actions variables**
+
+- `TYPESAFE_API_URL`
+- `TYPESAFE_API_AUTH_HEADER` (only if required)
+- `TYPESAFE_API_AUTH_PREFIX` (only if required)
+
+The `wikileaks-sample` workflow now injects those values into the process
+environment and runs a secret-safe configuration check.
+
+### Why the endpoint is not hard-coded
+
+TypeSafe publicly exposes an API service and describes Jev as early access, but
+the public pages do not currently publish a stable Jev request-path/body/auth
+contract. The engine therefore refuses to invent one.
+
+Once the TypeSafe console/docs provide that contract, the remaining integration
+is a small `JevTransport.ask` implementation. The credential/config layer is
+already complete and the resolution queue/batch runner are ready for it.
