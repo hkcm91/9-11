@@ -3,49 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>September 11 Historical Explorer — MVP</title>
-  <meta name="description" content="Provenance-first map and timeline prototype for the September 11 historical archive.">
+  <title>September 11 Historical Explorer</title>
+  <meta name="description" content="A provenance-first map and timeline for exploring public historical evidence from September 11, 2001.">
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div>
-      <p class="eyebrow">Historical Evidence Engine</p>
-      <h1>September 11 Explorer</h1>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">Historical Evidence Engine</p>
+        <h1>September 11 Explorer</h1>
+      </div>
     </div>
-    <div class="status" id="status">Loading evidence read model…</div>
+    <div class="topbar-context">
+      <span class="date-chip">Tuesday · September 11, 2001</span>
+      <span class="status" id="status">Loading evidence read model…</span>
+    </div>
   </header>
 
-  <main class="layout">
-    <aside class="sidebar" aria-label="Timeline and filters">
-      <section class="panel timeline-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Historical time</p>
-            <h2 id="clock">—</h2>
-          </div>
-          <button type="button" id="reset-time" class="quiet-button">Reset</button>
-        </div>
-        <input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Historical timeline">
-        <div class="timeline-labels">
-          <span id="time-start">—</span>
-          <span id="time-end">—</span>
-        </div>
-        <label class="field">
-          <span>Visible time window</span>
-          <select id="window-size">
-            <option value="2">± 2 minutes</option>
-            <option value="5" selected>± 5 minutes</option>
-            <option value="15">± 15 minutes</option>
-            <option value="30">± 30 minutes</option>
-          </select>
-        </label>
+  <main class="explorer-shell">
+    <aside class="sidebar" aria-label="Explorer controls">
+      <section class="control-section intro-section">
+        <p class="eyebrow">Explore the morning</p>
+        <p class="sidebar-intro">Move through time and inspect where public records place cameras, broadcasts, testimony, and other evidence.</p>
       </section>
 
-      <section class="panel filters">
-        <p class="eyebrow">Filter evidence</p>
+      <section class="control-section">
+        <div class="control-heading">
+          <p class="eyebrow">Current view</p>
+          <button type="button" id="reset-view" class="text-button">Reset</button>
+        </div>
+        <div class="stat-stack">
+          <div><strong id="visible-count">0</strong><span>visible records</span></div>
+          <div><strong id="mapped-count">0</strong><span>mapped records</span></div>
+          <div><strong id="source-count">0</strong><span>source collections</span></div>
+        </div>
+      </section>
+
+      <section class="control-section">
+        <p class="eyebrow">Evidence filters</p>
+        <label class="field">
+          <span>Search</span>
+          <input id="search" type="search" placeholder="Title, creator, source…" aria-label="Search evidence">
+        </label>
         <label class="field">
           <span>Media type</span>
           <select id="media-filter">
@@ -58,59 +61,111 @@
         </label>
         <label class="toggle">
           <input id="untimed-toggle" type="checkbox" checked>
-          <span>Show mapped items without timeline time</span>
+          <span>Show mapped records without a precise time</span>
         </label>
       </section>
 
-      <section class="panel summary-panel">
-        <p class="eyebrow">Current view</p>
-        <div class="stat-grid">
-          <div><strong id="visible-count">0</strong><span>records</span></div>
-          <div><strong id="mapped-count">0</strong><span>mapped</span></div>
-          <div><strong id="source-count">0</strong><span>sources</span></div>
-          <div><strong id="verified-count">0</strong><span>verified claims</span></div>
-        </div>
+      <section class="control-section">
+        <p class="eyebrow">Map layers</p>
+        <label class="toggle">
+          <input id="footprint-toggle" type="checkbox" checked>
+          <span>WTC footprint reference</span>
+        </label>
+        <label class="toggle">
+          <input id="heading-toggle" type="checkbox" checked>
+          <span>Selected camera direction</span>
+        </label>
+        <p class="fine-print">The street basemap is modern. Historical reference geometry is shown separately and labeled where approximate.</p>
       </section>
 
-      <section class="panel legend-panel">
-        <p class="eyebrow">Claim status</p>
-        <div class="legend-row"><span class="legend-dot proposed"></span> Proposed</div>
-        <div class="legend-row"><span class="legend-dot reviewed"></span> Reviewed</div>
-        <div class="legend-row"><span class="legend-dot verified"></span> Verified</div>
-        <div class="legend-row"><span class="legend-dot disputed"></span> Disputed</div>
-        <p class="fine-print">A marker is evidence with a claim status, not an assertion that the archive has independently verified it.</p>
+      <section class="control-section legend-section">
+        <p class="eyebrow">Evidence language</p>
+        <div class="media-legend">
+          <div><span class="media-symbol photo">●</span> Photo</div>
+          <div><span class="media-symbol video">◆</span> Video</div>
+          <div><span class="media-symbol audio">▲</span> Audio</div>
+          <div><span class="media-symbol document">■</span> Document / testimony</div>
+        </div>
+        <div class="claim-legend">
+          <div><span class="legend-ring proposed"></span> Proposed</div>
+          <div><span class="legend-ring reviewed"></span> Reviewed</div>
+          <div><span class="legend-ring verified"></span> Verified</div>
+          <div><span class="legend-ring disputed"></span> Disputed</div>
+        </div>
       </section>
     </aside>
 
-    <section class="workspace">
-      <div id="map" aria-label="Lower Manhattan evidence map"></div>
-      <div class="record-tray">
-        <div class="tray-heading">
-          <div>
-            <p class="eyebrow">Visible evidence</p>
-            <h2>Records near this moment</h2>
-          </div>
-          <input id="search" type="search" placeholder="Search title, creator, source…" aria-label="Search visible evidence">
-        </div>
-        <div id="record-list" class="record-list" aria-live="polite"></div>
+    <section class="map-stage" aria-label="Lower Manhattan historical evidence map">
+      <div id="map"></div>
+      <div class="map-title-card">
+        <p class="eyebrow">Lower Manhattan</p>
+        <strong id="map-clock">—</strong>
+        <span id="map-window-label">Evidence within ± 5 minutes</span>
+      </div>
+      <div class="map-note">
+        Modern street basemap · historical overlays shown separately
       </div>
     </section>
 
-    <aside id="detail" class="detail-panel" aria-label="Record details">
+    <aside id="detail" class="detail-panel" aria-label="Selected evidence record">
       <div class="detail-empty">
+        <div class="empty-symbol" aria-hidden="true">＋</div>
         <p class="eyebrow">Evidence record</p>
-        <h2>Select a marker or record</h2>
-        <p>Claim confidence, method, source attribution, and rights notes remain visible here so uncertainty is never hidden by the interface.</p>
+        <h2>Select evidence on the map or timeline</h2>
+        <p>Time, location, confidence, method, source attribution, and uncertainty remain visible together.</p>
       </div>
     </aside>
+
+    <section class="timeline-dock" aria-label="Historical timeline">
+      <div class="timeline-toolbar">
+        <div>
+          <p class="eyebrow">Historical time</p>
+          <div class="timeline-time-row">
+            <h2 id="clock">—</h2>
+            <span id="moment-summary">0 records near this moment</span>
+          </div>
+        </div>
+        <div class="timeline-controls">
+          <label>
+            <span>Window</span>
+            <select id="window-size">
+              <option value="2">± 2 min</option>
+              <option value="5" selected>± 5 min</option>
+              <option value="15">± 15 min</option>
+              <option value="30">± 30 min</option>
+            </select>
+          </label>
+          <button type="button" id="reset-time" class="secondary-button">8:00 AM</button>
+        </div>
+      </div>
+
+      <div class="historical-timeline">
+        <div class="event-band" id="event-band" aria-label="Major event anchors"></div>
+        <div class="density-band" id="density-band" aria-hidden="true"></div>
+        <input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Historical timeline">
+        <div class="timeline-labels">
+          <span id="time-start">—</span>
+          <span id="time-end">—</span>
+        </div>
+      </div>
+
+      <div class="evidence-strip-heading">
+        <p class="eyebrow">Evidence near this moment</p>
+        <span id="evidence-strip-count">0 shown</span>
+      </div>
+      <div id="evidence-strip" class="evidence-strip" aria-live="polite"></div>
+    </section>
   </main>
 
-  <template id="record-card-template">
-    <button type="button" class="record-card">
-      <span class="record-card-time"></span>
-      <strong class="record-card-title"></strong>
-      <span class="record-card-meta"></span>
-      <span class="record-card-claim"></span>
+  <template id="evidence-card-template">
+    <button type="button" class="evidence-card">
+      <span class="evidence-card-symbol" aria-hidden="true"></span>
+      <span class="evidence-card-body">
+        <span class="evidence-card-time"></span>
+        <strong class="evidence-card-title"></strong>
+        <span class="evidence-card-meta"></span>
+      </span>
+      <span class="evidence-card-status"></span>
     </button>
   </template>
 
