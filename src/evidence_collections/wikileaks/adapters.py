@@ -231,7 +231,18 @@ class WikiLeaksWarDiariesAdapter:
             creator_raw=_text(
                 _lookup(record, "reporting_unit", "reporting unit", "originator_group", "originator group")
             ),
-            date_raw=_text(_lookup(record, "date", "event_time", "event time", "datetime", "timestamp")),
+            date_raw=_text(
+                _lookup(
+                    record,
+                    "date",
+                    "date_occurred",
+                    "dateoccurred",
+                    "event_time",
+                    "event time",
+                    "datetime",
+                    "timestamp",
+                )
+            ),
             # Region and MGRS are preserved below but do not falsely count as a
             # resolved map location. This intentionally creates a location task.
             location_raw=explicit_location,
