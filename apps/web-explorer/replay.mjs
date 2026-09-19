@@ -1,4 +1,4 @@
-import { TOWERS } from './scene.mjs';
+import { TOWERS, TOWER_BEARING } from './scene.mjs';
 
 export const SOUTH_COLLAPSE = Date.parse(TOWERS[1].collapse);
 export const COLLAPSE_DURATION = 12;
@@ -78,7 +78,7 @@ export function sampleAircraft(tower, historicalTime, motion = true) {
   const approach = AIRCRAFT_APPROACH[tower.id];
   const heading = approach.heading * Math.PI / 180, descent = approach.descent * Math.PI / 180;
   const travel = age * approach.speed;
-  return { visible: motion && age >= -12 && age < 0, age,
+  return { visible: age >= -12 && age < 0, age,
     x: approach.offset + Math.sin(heading) * Math.cos(descent) * travel,
     y: tower.face * 32.1 + Math.cos(heading) * Math.cos(descent) * travel,
     z: (tower.impactBase + tower.impactTop) / 2 - Math.sin(descent) * travel,
@@ -104,4 +104,30 @@ export function sampleFlame(tower, historicalTime, index, motion = true) {
     height: (8 + seeded(index + 820) * 10) * variation,
     opacity: .7 + .1 * Math.sin(phase + 1),
   };
+}
+
+
+// The ground projection and 3D guide use the same sampled approach as the plane.
+// These samples are estimates, NOT recorded radar returns.
+export function approachTrack(tower) {
+  return Array.from({length:25},(_,i)=>sampleAircraft(tower,Date.parse(tower.impact)-12000+i*500));
+}
+export function aircraftCoordinate(tower, position) {
+  const angle=TOWER_BEARING*Math.PI/180;
+  return [tower.lng+(position.x*Math.cos(angle)-position.y*Math.sin(angle))/(111320*Math.cos(tower.lat*Math.PI/180)),
+    tower.lat+(position.x*Math.sin(angle)+position.y*Math.cos(angle))/111320];
+}
+export function aircraftMapData(time) {
+  const features=[];
+  for(const tower of TOWERS) {
+    const flight=sampleAircraft(tower,time);
+    if(flight.age < -12 || flight.age >= 6) continue;
+    const name=tower.id==='north'?'Flight 11':'Flight 175';
+    features.push({type:'Feature',properties:{kind:'route',tower:tower.id,label:name+' · estimated ground track'},
+      geometry:{type:'LineString',coordinates:approachTrack(tower).map(p=>aircraftCoordinate(tower,p))}});
+    if(flight.visible) features.push({type:'Feature',properties:{kind:'aircraft',tower:tower.id,
+      label:name+' · ground position',heading:(AIRCRAFT_APPROACH[tower.id].heading-TOWER_BEARING+360)%360},
+      geometry:{type:'Point',coordinates:aircraftCoordinate(tower,flight)}});
+  }
+  return {type:'FeatureCollection',features};
 }

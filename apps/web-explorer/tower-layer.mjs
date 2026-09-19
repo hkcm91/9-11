@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
 import { TOWERS, TOWER_BEARING } from './scene.mjs';
-import { sampleReplay, seeded, smokeParticle, upperSectionPose, sampleAircraft, sampleFlame } from './replay.mjs';
+import { sampleReplay, seeded, smokeParticle, upperSectionPose, sampleAircraft, sampleFlame, approachTrack } from './replay.mjs';
 
 // Meter-based procedural models. All geometry is authored locally, Z is up.
 export function createTowerLayer(maplibregl) {
@@ -130,6 +130,9 @@ export function createTowerLayer(maplibregl) {
     surface([[-2,-39],[-9,-46],[-9,-48],[0,-45],[9,-48],[9,-46],[2,-39]],1);
     mesh(aircraft,airframe,0,-43,4,1,8,7);
     for(const x of [-8,8]) mesh(aircraft,materials.roof,x,-25,-2,3.5,7,3.5);
+    const track=new THREE.BufferGeometry().setFromPoints(approachTrack(tower).map(p=>new THREE.Vector3(p.x,p.y,p.z)));
+    const route=new THREE.Line(track,new THREE.LineDashedMaterial({color:0xc1af83,dashSize:20,gapSize:16,transparent:true,opacity:.6}));
+    route.computeLineDistances();route.frustumCulled=false;group.add(route);
     const damage = new THREE.Group(); group.add(damage);
     for(let i=0;i<9;i++) {
       const x=(i-4)*5.4+(tower.id==='south'?7:0), h=(tower.impactTop-tower.impactBase)*(1-.11*Math.abs(i-4));
@@ -154,14 +157,14 @@ export function createTowerLayer(maplibregl) {
       // Attach to the damaged facade, not the camera: tower depth occludes the far face.
       node.rotation.x=Math.PI/2;node.frustumCulled=false;group.add(node);return node;
     });
-    return {tower,group,lower,upper,split,sections,damage,debris,fragments,aircraft,flames,
+    return {tower,group,lower,upper,split,sections,damage,debris,fragments,aircraft,flames,route,
       impact:clouds(3,0x98704a),
       smoke:clouds(28,0x64635e),dust:clouds(24,0xb1a798)};
   });
   // Low, neutral plaza surface only; surrounding building geometry stays on the map.
   mesh(root,materials.plaza,35,-55,-1,160,205,1);
 
-  let renderer, map, lastTime=0, visible=true, motion=true;
+  let renderer, map, lastTime=0, visible=true, motion=true, aircraftVisible=true;
   const layer = {
     id:'wtc-detailed',type:'custom',renderingMode:'3d',
     onAdd(instance,gl) {
@@ -171,11 +174,13 @@ export function createTowerLayer(maplibregl) {
     },
     setTime(time, options={}) {
       lastTime=Number(time); motion=options.motion ?? motion; visible=options.visible ?? visible;
+      aircraftVisible=options.aircraft ?? aircraftVisible;
       root.visible=visible;
       const states=sampleReplay(lastTime,motion);
       for(const model of models) {
         const flight=sampleAircraft(model.tower,lastTime,motion);
-        model.aircraft.visible=flight.visible;
+        model.aircraft.visible=aircraftVisible && flight.visible;
+        model.route.visible=aircraftVisible && flight.age>=-12 && flight.age<6;
         model.aircraft.position.set(flight.x,flight.y,flight.z);
         model.aircraft.rotation.set(-flight.descent,-flight.bank,-flight.heading,'ZXY');
         model.impact.forEach((node,i)=>{
