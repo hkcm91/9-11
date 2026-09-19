@@ -201,6 +201,17 @@ def build_parser() -> argparse.ArgumentParser:
     resolution_candidates.add_argument("--max-entity-pairs", type=int, default=500)
     resolution_candidates.add_argument("--max-event-pairs", type=int, default=500)
 
+    jev_batch = subparsers.add_parser(
+        "run-jev-decisions",
+        help="Run a DecisionRequest JSONL queue through TypeSafe Jev and emit proposal-only outputs",
+    )
+    jev_batch.add_argument("input", type=Path)
+    jev_batch.add_argument("--output", type=Path, required=True)
+    jev_batch.add_argument("--proposal-output", type=Path, default=None)
+    jev_batch.add_argument("--dotenv", type=Path, default=Path(".env"))
+    jev_batch.add_argument("--timeout", type=float, default=30.0)
+    jev_batch.add_argument("--agent-version", default="jev-http-v1")
+
     demo = subparsers.add_parser(
         "run-demo-pipeline",
         help="Run the synthetic demo_history corpus end-to-end through the generic engine",
@@ -449,6 +460,25 @@ def main(argv: list[str] | None = None) -> int:
             collection_id=collection.id,
             max_entity_pairs=args.max_entity_pairs,
             max_event_pairs=args.max_event_pairs,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "run-jev-decisions":
+        from historical_engine.ai.batch import write_decision_batch
+        from historical_engine.ai.jev import JevDecisionProvider
+
+        provider = JevDecisionProvider.from_env(
+            dotenv_path=str(args.dotenv),
+            timeout_s=args.timeout,
+        )
+        payload = write_decision_batch(
+            provider,
+            args.input,
+            args.output,
+            collection=collection,
+            agent_version=args.agent_version,
+            proposal_output=args.proposal_output,
         )
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
