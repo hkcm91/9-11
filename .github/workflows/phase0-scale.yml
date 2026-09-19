@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/archive/explorer_export.py"
+      - "src/archive/adapters/arcgis_photo_map.py"
       - "apps/web-explorer/**"
       - "pyproject.toml"
       - ".github/workflows/phase0-scale.yml"
@@ -12,6 +13,8 @@ on:
     paths:
       - "src/archive/explorer_export.py"
       - "tests/test_explorer_export.py"
+      - "tests/test_arcgis_photo_map.py"
+      - "src/archive/adapters/arcgis_photo_map.py"
       - "apps/web-explorer/**"
       - "pyproject.toml"
       - ".github/workflows/phase0-scale.yml"
@@ -64,7 +67,7 @@ jobs:
       - name: Collect Internet Archive broadcast metadata
         run: |
           archive-ingest sample-internet-archive --limit "${{ inputs.internet_archive_limit || '500' }}" --delay 0.25 --output artifacts/raw/internet-archive.jsonl
-          archive-ingest sample-internet-archive --details --limit 50 --delay 0.25 --output artifacts/raw/internet-archive-details.jsonl
+          archive-ingest sample-internet-archive --details --limit 150 --delay 0.25 --output artifacts/raw/internet-archive-details.jsonl
 
       - name: Build normalized research outputs
         run: |
