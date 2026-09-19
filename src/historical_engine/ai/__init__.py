@@ -18,6 +18,7 @@ from historical_engine.ai.fakes import (
     FakeVisionProvider,
 )
 from historical_engine.ai.jev import JevDecisionProvider, JevTransport
+from historical_engine.ai.typesafe_http import TypeSafeHttpTransport
 from historical_engine.ai.pipeline import AssistedDecision, run_decision
 from historical_engine.ai.typesafe_config import (
     TypeSafeConfig,
@@ -62,6 +63,7 @@ __all__ = [
     "GenerativeProvider",
     "JevDecisionProvider",
     "JevTransport",
+    "TypeSafeHttpTransport",
     "load_decision_requests",
     "request_from_dict",
     "run_decision_batch",
