@@ -17,6 +17,22 @@ from historical_engine.storage.ids import digest_id
 
 COLLECTION_ID = "wikileaks"
 
+_PLACEHOLDERS = {
+    "",
+    "not provided",
+    "not provided.",
+    "unknown",
+    "none selected",
+    "n/a",
+    "na",
+    "none",
+}
+
+
+def _meaningful(value: object) -> str | None:
+    text = str(value or "").strip()
+    return None if text.casefold() in _PLACEHOLDERS else text
+
 
 def _evidence(item: SourceItem, note: str | None = None) -> list[EvidenceItem]:
     return [EvidenceItem(source_item_id=item.id, relationship="supports", note=note)]
@@ -132,7 +148,7 @@ def derive_plusd_graph(item: SourceItem) -> Iterable[Entity | Relationship]:
     doc = _document_entity(item)
     yield doc
 
-    origin = str(item.creator_raw or "").strip()
+    origin = _meaningful(item.creator_raw)
     if origin:
         origin_kind = "diplomatic_mission" if "embassy" in origin.casefold() else "organization"
         origin_entity = _organization(item, origin, kind=origin_kind)
@@ -150,7 +166,7 @@ def derive_plusd_graph(item: SourceItem) -> Iterable[Entity | Relationship]:
     if isinstance(destinations, str):
         destinations = [destinations]
     for destination in destinations:
-        name = str(destination).strip()
+        name = _meaningful(destination)
         if not name:
             continue
         kind = "diplomatic_mission" if "embassy" in name.casefold() else "organization"
@@ -169,7 +185,7 @@ def derive_plusd_graph(item: SourceItem) -> Iterable[Entity | Relationship]:
     if isinstance(references, str):
         references = [references]
     for reference in references:
-        ref = str(reference).strip()
+        ref = _meaningful(reference)
         if not ref:
             continue
         target = Entity(
@@ -229,7 +245,7 @@ def derive_war_diary_graph(item: SourceItem) -> Iterable[Entity | Event | Relati
         object_id=event.id,
     )
 
-    reporting_unit = str(item.metadata_raw.get("reporting_unit") or item.creator_raw or "").strip()
+    reporting_unit = _meaningful(item.metadata_raw.get("reporting_unit") or item.creator_raw)
     if reporting_unit:
         unit = _organization(item, reporting_unit, kind="military_unit")
         yield unit
@@ -242,7 +258,7 @@ def derive_war_diary_graph(item: SourceItem) -> Iterable[Entity | Event | Relati
             object_id=unit.id,
         )
 
-    region = str(item.metadata_raw.get("region") or "").strip()
+    region = _meaningful(item.metadata_raw.get("region"))
     if region:
         place = _place(item, region, place_kind="region")
         yield place
@@ -255,7 +271,7 @@ def derive_war_diary_graph(item: SourceItem) -> Iterable[Entity | Event | Relati
             object_id=place.id,
         )
 
-    mgrs = str(item.metadata_raw.get("mgrs") or "").strip()
+    mgrs = _meaningful(item.metadata_raw.get("mgrs"))
     if mgrs:
         grid = _place(item, mgrs, place_kind="mgrs")
         yield grid
