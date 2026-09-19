@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e .
 
-      - name: Validate inputs
+      - name: Validate optional public dataset URLs
         env:
           PLUSD_URL: ${{ inputs.plusd_url }}
           WAR_URL: ${{ inputs.war_diaries_url }}
@@ -35,10 +35,7 @@ jobs:
           python - <<'PY'
           import os
           from urllib.parse import urlparse
-          urls = [os.environ.get("PLUSD_URL", ""), os.environ.get("WAR_URL", "")]
-          if not any(urls):
-              raise SystemExit("Provide plusd_url and/or war_diaries_url")
-          for url in filter(None, urls):
+          for url in filter(None, [os.environ.get("PLUSD_URL", ""), os.environ.get("WAR_URL", "")]):
               parsed = urlparse(url)
               if parsed.scheme != "https" or not parsed.netloc:
                   raise SystemExit(f"Only public HTTPS dataset URLs are accepted: {url}")
@@ -57,7 +54,7 @@ jobs:
             curl --fail --location --retry 3 --retry-delay 2 "$WAR_URL" -o artifacts/input/war-diaries.csv
           fi
 
-      - name: Normalize samples
+      - name: Normalize samples or use checked-in real regression sample
         env:
           LIMIT: ${{ inputs.sample_limit }}
         run: |
@@ -66,6 +63,9 @@ jobs:
           fi
           if [ -f artifacts/input/war-diaries.csv ]; then
             archive-ingest import-wikileaks-war-diaries artifacts/input/war-diaries.csv --limit "$LIMIT" --output artifacts/raw/war-diaries.jsonl
+          fi
+          if ! compgen -G "artifacts/raw/*.jsonl" > /dev/null; then
+            cp src/evidence_collections/wikileaks/fixtures/real_sample.jsonl artifacts/raw/real-sample.jsonl
           fi
 
       - name: Exercise shared evidence pipeline
@@ -77,7 +77,16 @@ jobs:
           archive-ingest --collection wikileaks derive-entity-claims artifacts/raw/*.jsonl --output artifacts/reports/entity-claims.jsonl
           archive-ingest --collection wikileaks prioritize-jsonl artifacts/raw/*.jsonl --output artifacts/reports/enrichment-priority.jsonl
           archive-ingest --collection wikileaks build-work-queue artifacts/raw/*.jsonl --output artifacts/reports/work-queue.jsonl
-          archive-ingest --collection wikileaks build-store             --database artifacts/wikileaks.sqlite             --records artifacts/raw/*.jsonl             --temporal artifacts/reports/temporal-claims.jsonl             --spatial artifacts/reports/spatial-claims.jsonl             --entities artifacts/reports/entity-claims.jsonl             --stats-output artifacts/reports/store-stats.json
+          archive-ingest --collection wikileaks build-store \
+            --database artifacts/wikileaks.sqlite \
+            --records artifacts/raw/*.jsonl \
+            --temporal artifacts/reports/temporal-claims.jsonl \
+            --spatial artifacts/reports/spatial-claims.jsonl \
+            --entities artifacts/reports/entity-claims.jsonl \
+            --stats-output artifacts/reports/store-stats.json
+          archive-ingest --collection wikileaks build-graph artifacts/raw/*.jsonl \
+            --database artifacts/wikileaks.sqlite \
+            --stats-output artifacts/reports/graph-stats.json
 
       - uses: actions/upload-artifact@v4
         with:
