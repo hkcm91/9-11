@@ -105,3 +105,47 @@ replace the original documents.
 Running the `wikileaks-sample` GitHub Action without dataset URLs uses this
 fixture automatically. Supplying public CSV URLs instead exercises up to the
 requested sample limit (100 by default).
+
+
+## 200-record validation milestone
+
+The `wikileaks-sample` workflow now doubles as a graph-quality validation job.
+
+Set:
+
+- `plusd_url` to a public Cablegate/PlusD CSV
+- `war_diaries_url` to a public War Diaries CSV
+- `sample_limit` to `100`
+
+When both datasets are supplied, the workflow requires at least 100 normalized
+records from each source, producing the intended 200-record validation corpus.
+
+After graph materialization it runs:
+
+```bash
+archive-ingest --collection wikileaks analyze-graph-quality \
+  --database artifacts/wikileaks.sqlite \
+  --json-output artifacts/reports/graph-quality.json \
+  --markdown-output artifacts/reports/graph-quality.md
+```
+
+The quality report checks:
+
+- source counts
+- node / event / relationship counts
+- relationship predicates and assertion levels
+- placeholder entities such as `Not Provided`
+- duplicate canonical-name/type pressure
+- isolated nodes
+- dangling relationship endpoints
+- events with missing or invalid times
+- graph relationship density
+- high-degree nodes that may indicate over-broad normalization
+
+The report is descriptive. It never merges entities, removes records, upgrades
+assertion strength, or verifies a claim automatically.
+
+For bulk-source discovery, prefer stable public mirrors or institutional archive
+copies rather than scraping the live search UI repeatedly. The workflow keeps
+dataset URLs as explicit inputs so the exact source used for a validation run is
+preserved in the Actions run metadata.
