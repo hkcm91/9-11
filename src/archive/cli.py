@@ -177,6 +177,15 @@ def build_parser() -> argparse.ArgumentParser:
     graph.add_argument("--database", type=Path, required=True)
     graph.add_argument("--stats-output", type=Path, default=None)
 
+    graph_quality = subparsers.add_parser(
+        "analyze-graph-quality",
+        help="Audit a materialized evidence graph for structural/noise problems",
+    )
+    graph_quality.add_argument("--database", type=Path, required=True)
+    graph_quality.add_argument("--json-output", type=Path, default=None)
+    graph_quality.add_argument("--markdown-output", type=Path, default=None)
+    graph_quality.add_argument("--high-degree-threshold", type=int, default=20)
+
     demo = subparsers.add_parser(
         "run-demo-pipeline",
         help="Run the synthetic demo_history corpus end-to-end through the generic engine",
@@ -395,6 +404,18 @@ def main(argv: list[str] | None = None) -> int:
             args.stats_output.parent.mkdir(parents=True, exist_ok=True)
             args.stats_output.write_text(rendered + "\n", encoding="utf-8")
         print(rendered)
+        return 0
+
+    if args.command == "analyze-graph-quality":
+        from historical_engine.graph_quality import write_report
+
+        report = write_report(
+            args.database,
+            json_output=args.json_output,
+            markdown_output=args.markdown_output,
+            high_degree_threshold=args.high_degree_threshold,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
 
     if args.command == "run-demo-pipeline":
