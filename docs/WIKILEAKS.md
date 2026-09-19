@@ -149,3 +149,86 @@ For bulk-source discovery, prefer stable public mirrors or institutional archive
 copies rather than scraping the live search UI repeatedly. The workflow keeps
 dataset URLs as explicit inputs so the exact source used for a validation run is
 preserved in the Actions run metadata.
+
+
+## Entity and event resolution candidate queue
+
+After graph materialization, the engine can now generate narrow review questions
+for ambiguous graph pairs:
+
+```bash
+archive-ingest --collection wikileaks build-resolution-candidates \
+  --database artifacts/wikileaks.sqlite \
+  --output artifacts/reports/resolution-candidates.jsonl
+```
+
+The queue currently emits the engine's existing closed decision types:
+
+- `same_entity`
+- `same_event`
+
+Each row contains:
+
+- subject node id
+- object node id
+- collection id
+- evidence source-record ids
+- heuristic candidate score
+- structured context explaining why the pair was surfaced
+
+The deterministic candidate stage does **not** answer the question. It only
+reduces the search space so a human or a narrow decision provider such as Jev
+does not need to compare every possible pair.
+
+### Entity candidates
+
+Potential same-entity pairs are surfaced from normalized name similarity within
+the same entity type. Punctuation/format variants such as `U.S. Embassy Cairo`
+versus `US Embassy Cairo` can become candidates, while unrelated names are
+left alone.
+
+No canonical entity is merged or rewritten.
+
+### Event candidates
+
+Potential same-event pairs require compatible event type and a bounded time
+window, then combine title similarity with structured metadata such as event
+category and source event type.
+
+The result is a question such as:
+
+```json
+{
+  "question": "same_event",
+  "subject_id": "event:...",
+  "object_id": "event:...",
+  "evidence_ids": ["wikileaks-war-diaries:...", "wikileaks-war-diaries:..."],
+  "context": {
+    "candidate_score": 0.81,
+    "time_delta_hours": 0.5,
+    "shared_category": true,
+    "shared_type": true
+  }
+}
+```
+
+A positive model answer still enters the proposal/review lifecycle. It does not
+merge events automatically.
+
+### Jev handoff
+
+The output schema is intentionally the same `DecisionRequest` vocabulary used
+by `historical_engine.ai`. The existing Jev provider slot can therefore
+consume this queue once a real Jev transport/API client is configured.
+
+This keeps responsibilities separate:
+
+```text
+graph
+  -> deterministic candidate generation
+  -> Jev / other DecisionProvider
+  -> confidence routing
+  -> proposed entity_resolution / event_link
+  -> human review
+  -> accepted or rejected relationship
+```
