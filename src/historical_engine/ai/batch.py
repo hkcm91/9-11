@@ -60,6 +60,11 @@ def decision_to_dict(decision: AssistedDecision) -> dict[str, Any]:
     payload["rationale"] = decision.response.rationale
     payload["provider"] = decision.response.provider
     payload["model"] = decision.response.model
+    raw = decision.response.raw if isinstance(decision.response.raw, dict) else {}
+    if isinstance(raw.get("probabilities"), dict):
+        payload["probabilities"] = dict(raw["probabilities"])
+    if raw.get("usage") is not None:
+        payload["usage"] = raw.get("usage")
     if decision.proposal is not None:
         payload["proposal"] = decision.proposal.to_dict()
     return payload
@@ -97,8 +102,13 @@ def write_decision_batch(
     collection: Collection,
     agent_version: str = "0",
     proposal_output: Path | str | None = None,
+    max_requests: int | None = None,
 ) -> dict[str, int]:
     requests = load_decision_requests(requests_path)
+    if max_requests is not None:
+        if max_requests < 1:
+            raise ValueError("max_requests must be >= 1")
+        requests = requests[:max_requests]
     decisions = run_decision_batch(
         provider,
         requests,
