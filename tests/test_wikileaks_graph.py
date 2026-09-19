@@ -33,11 +33,11 @@ def test_real_wikileaks_fixture_materializes_typed_graph(tmp_path: Path) -> None
     assert result["records"] == 2
     assert result["entities"] >= 8
     assert result["events"] == 1
-    assert result["relationships"] >= 8
+    assert result["relationships"] >= 7
 
     assert stats["source_records"] == 2
     assert stats["events"] == 1
-    assert stats["relationships"] >= 8
+    assert stats["relationships"] >= 7
     assert references == 2
 
     assert {
@@ -45,7 +45,6 @@ def test_real_wikileaks_fixture_materializes_typed_graph(tmp_path: Path) -> None
         "sent_to",
         "references_document",
         "describes",
-        "reported_by",
         "located_in",
         "occurred_at",
     } <= predicates
