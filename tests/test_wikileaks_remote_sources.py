@@ -2,6 +2,8 @@ import io
 import json
 from pathlib import Path
 
+import py7zr
+
 from evidence_collections.wikileaks.remote_sources import (
     CABLEGATE_FIELDS,
     WAR_DIARY_FIELDS,
@@ -33,7 +35,7 @@ def test_discover_cablegate_csv_url_prefers_largest_csv(monkeypatch) -> None:
 def test_discover_archive_csv_url_supports_war_diary_item(monkeypatch) -> None:
     payload = {
         "files": [
-            {"name": "afg-war-diary.csv", "size": "90000000"},
+            {"name": "afg-war-diary.csv.7z", "size": "77000000"},
             {"name": "metadata.xml", "size": "1000"},
         ]
     }
@@ -45,7 +47,7 @@ def test_discover_archive_csv_url_supports_war_diary_item(monkeypatch) -> None:
 
     url = discover_archive_csv_url("WikileaksWarDiaryCsv")
 
-    assert url.endswith("/WikileaksWarDiaryCsv/afg-war-diary.csv")
+    assert url.endswith("/WikileaksWarDiaryCsv/afg-war-diary.csv.7z")
 
 
 def test_stream_headered_csv_sample_writes_only_requested_records(tmp_path: Path, monkeypatch) -> None:
@@ -109,3 +111,36 @@ def test_war_diary_schema_contains_adapter_fields() -> None:
     assert "Summary" in WAR_DIARY_FIELDS
     assert "MGRS" in WAR_DIARY_FIELDS
     assert "Classification" in WAR_DIARY_FIELDS
+
+
+
+def test_stream_7z_headerless_csv_sample(tmp_path: Path, monkeypatch) -> None:
+    source_csv = tmp_path / "afg-war-diary.csv"
+    source_csv.write_text(
+        "report-1,2004-01-01 00:00:00,Enemy Action,direct fire,track-1,title one,summary one,RC EAST,ENEMY,False,UNIT,UNIT,Infantry,0,0,0,0,0,0,0,0,0,42SWB3900916257,32.6,69.4,UNKNOWN,UNKNOWN,,,ENEMY,RED,SECRET\n"
+        "report-2,2004-01-01 01:00:00,Friendly Action,cache found/cleared,track-2,title two,summary two,RC EAST,FRIEND,False,UNIT,UNIT,Infantry,0,0,0,0,0,0,0,0,0,42SWB3900916258,32.7,69.5,UNKNOWN,UNKNOWN,,,FRIEND,BLUE,SECRET\n",
+        encoding="utf-8",
+    )
+    archive_path = tmp_path / "afg-war-diary.csv.7z"
+    with py7zr.SevenZipFile(archive_path, "w") as archive:
+        archive.write(source_csv, arcname="afg-war-diary.csv")
+    archive_bytes = archive_path.read_bytes()
+
+    monkeypatch.setattr(
+        "evidence_collections.wikileaks.remote_sources._open",
+        lambda url, timeout=60.0: io.BytesIO(archive_bytes),
+    )
+
+    output = tmp_path / "war-diaries.csv"
+    result = stream_csv_sample(
+        "https://example.test/afg-war-diary.csv.7z",
+        output,
+        limit=1,
+        fieldnames=WAR_DIARY_FIELDS,
+    )
+
+    assert result["records"] == 1
+    text = output.read_text(encoding="utf-8")
+    assert "ReportKey,DateOccurred" in text
+    assert "report-1" in text
+    assert "report-2" not in text
