@@ -201,7 +201,13 @@ class InternetArchiveAdapter:
         records: list[SourceItem] = []
         for item in self.iter_items(max_items=limit):
             if enrich:
-                item = self.enrich_search_item(item)
+                try:
+                    item = self.enrich_search_item(item)
+                except InternetArchiveAdapterError:
+                    # Detailed media metadata is an enhancement. A transient
+                    # archive.org metadata failure must not discard the base
+                    # search record or abort the entire corpus build.
+                    pass
             records.append(self.normalize(item))
         return records
 
