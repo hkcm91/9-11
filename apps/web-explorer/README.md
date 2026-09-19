@@ -191,3 +191,16 @@ area using a distance filter (with a 1 m tolerance). The former `within` express
 supports points/lines, not building polygons, and allowed modern WTC structures to
 overlap the reconstructed towers. Simplified tower layers also remain explicitly
 hidden whenever the detailed renderer is active, including after toggle changes.
+
+
+### Localized flames
+
+Small flame shapes sit on each tower's damaged facade from impact until collapse
+initiation. They are illustrative fire indicators, not evidence of exact flame
+locations, temperatures, intensity, or fire spread. The detailed renderer uses
+soft translucent flame textures with slow variation driven only by historical
+time. Pause freezes them; reverse scrubbing restores the same shape. Turning off
+Reconstructed motion keeps a static flame shape. The lightweight fallback uses
+small amber facade patches. Both paths remove flames at collapse initiation and
+hide them with the historical reconstruction toggle. No flash, sound, or separate
+animation loop is added.

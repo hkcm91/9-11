@@ -28,6 +28,7 @@ test('collapsed towers lose standing mass, antenna, damage and elevated smoke', 
       const solids = data.solid.features.filter(f => f.properties.tower === tower);
       assert.equal(solids.some(f => f.properties.kind === 'tower'), state[tower] !== 'collapsed');
       assert.equal(solids.some(f => f.properties.kind === 'damage'), state[tower] === 'impacted');
+      assert.equal(solids.some(f => f.properties.kind === 'flame'), state[tower] === 'impacted');
       assert.equal(solids.some(f => f.properties.kind === 'debris'), state[tower] === 'collapsed');
       assert.equal(data.smoke.features.some(f => f.properties.tower === tower), state[tower] === 'impacted');
       assert.equal(data.dust.features.some(f => f.properties.tower === tower), state[tower] === 'collapsed');

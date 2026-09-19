@@ -335,6 +335,7 @@ function addHistoricalLayers() {
         ["get", "kind"],
         "antenna", "#ded6c7",
         "damage", "#443b37",
+        "flame", "#ce843e",
         "debris", "#8e877b",
         "#c3c7c7",
       ],

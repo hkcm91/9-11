@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
 import { TOWERS, TOWER_BEARING } from './scene.mjs';
-import { sampleReplay, seeded, smokeParticle, upperSectionPose, sampleAircraft } from './replay.mjs';
+import { sampleReplay, seeded, smokeParticle, upperSectionPose, sampleAircraft, sampleFlame } from './replay.mjs';
 
 // Meter-based procedural models. All geometry is authored locally, Z is up.
 export function createTowerLayer(maplibregl) {
@@ -29,6 +29,18 @@ export function createTowerLayer(maplibregl) {
   gradient.addColorStop(1,'rgba(255,255,255,0)');
   context.fillStyle=gradient;context.fillRect(0,0,128,128);
   const cloudTexture=new THREE.CanvasTexture(canvas);
+  const flameCanvas=document.createElement('canvas');flameCanvas.width=64;flameCanvas.height=128;
+  const fire=flameCanvas.getContext('2d');
+  const fireGradient=fire.createLinearGradient(0,128,0,0);
+  fireGradient.addColorStop(0,'rgba(242,181,79,0.95)');
+  fireGradient.addColorStop(.35,'rgba(214,111,36,0.9)');
+  fireGradient.addColorStop(.75,'rgba(174,64,24,0.55)');
+  fireGradient.addColorStop(1,'rgba(150,49,20,0)');
+  fire.fillStyle=fireGradient;fire.beginPath();fire.moveTo(8,128);
+  fire.bezierCurveTo(-4,85,29,67,26,5);fire.bezierCurveTo(60,48,39,75,57,92);
+  fire.bezierCurveTo(66,112,50,126,48,128);fire.closePath();fire.fill();
+  const flameTexture=new THREE.CanvasTexture(flameCanvas);
+  flameTexture.colorSpace=THREE.SRGBColorSpace;
   const faceCamera=new THREE.Quaternion(), pitchRotation=new THREE.Quaternion();
   const axisZ=new THREE.Vector3(0,0,1),axisX=new THREE.Vector3(1,0,0);
   const materials = {
@@ -135,7 +147,14 @@ export function createTowerLayer(maplibregl) {
       const material=new THREE.MeshBasicMaterial({color,map:cloudTexture,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide});
       const node=new THREE.Mesh(cloudGeometry,material); node.frustumCulled=false; group.add(node); return node;
     });
-    return {tower,group,lower,upper,split,sections,damage,debris,fragments,aircraft,
+    const flames=Array.from({length:9},()=>{
+      const material=new THREE.MeshBasicMaterial({map:flameTexture,transparent:true,
+        depthWrite:false,side:THREE.DoubleSide,opacity:0});
+      const node=new THREE.Mesh(cloudGeometry,material);
+      // Attach to the damaged facade, not the camera: tower depth occludes the far face.
+      node.rotation.x=Math.PI/2;node.frustumCulled=false;group.add(node);return node;
+    });
+    return {tower,group,lower,upper,split,sections,damage,debris,fragments,aircraft,flames,
       impact:clouds(3,0x98704a),
       smoke:clouds(28,0x64635e),dust:clouds(24,0xb1a798)};
   });
@@ -178,6 +197,13 @@ export function createTowerLayer(maplibregl) {
         // Hide lower mechanical bands as the descending front passes them.
         model.lower.children.filter(node=>node.isMesh).forEach(node=>{node.visible=!collapsing||node.position.z<s.pose.front;});
         model.damage.visible=s.status==='impacted';
+        model.flames.forEach((node,i)=>{
+          const flame=sampleFlame(model.tower,lastTime,i,motion);
+          node.visible=flame.visible;
+          node.position.set(flame.x,flame.y,flame.base+flame.height/2);
+          node.scale.set(flame.width/2,flame.height/2,1);
+          node.material.opacity=flame.opacity;
+        });
         model.debris.visible=s.status==='collapsed'||(collapsing&&s.collapseAge>5);
         model.debris.scale.z=collapsing?Math.min(1,(s.collapseAge-5)/7):1;
         model.fragments.visible=collapsing&&s.collapseAge>2;
@@ -218,7 +244,7 @@ export function createTowerLayer(maplibregl) {
     onRemove() {
       const geometries=new Set(),mats=new Set();
       scene.traverse(node=>{if(node.geometry)geometries.add(node.geometry);if(node.material)mats.add(node.material);});
-      geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());cloudTexture.dispose();renderer?.dispose();
+      geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());cloudTexture.dispose();flameTexture.dispose();renderer?.dispose();
     },
   };
   return layer;

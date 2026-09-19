@@ -74,6 +74,11 @@ export function buildScene(scene) {
             base: tower.impactBase + Math.abs(i - 2) * 3,
             height: tower.impactTop - Math.abs(i - 2) * 2 }));
       }
+      // Symbolic fire patches in the lightweight fallback.
+      for (let i = 0; i < 5; i++) solid.push(box(tower,
+        (i - 2) * 9 + (tower.id === 'south' ? 7 : 0), tower.face * 33.8,
+        3.5, .8, { kind: 'flame', base: tower.impactBase + 4,
+          height: tower.impactBase + 12 + (i % 3) * 2 }));
       // Static translucent volumes anchored at impact height; no clock or animation.
       for (let i = 0; i < 5; i++) smoke.push(cloud(tower,
         7 + i * 9, tower.face * 35 - i * 9, 15 + i * 5,

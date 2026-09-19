@@ -88,3 +88,20 @@ export function sampleAircraft(tower, historicalTime, motion = true) {
     radius: 9 + Math.min(6, Math.max(0, age)) * 5,
   };
 }
+
+// Symbolic local fire, not a model of measured fire spread or temperature.
+// Slow variation follows only the historical cursor; static mode freezes it.
+export function sampleFlame(tower, historicalTime, index, motion = true) {
+  const age = (Number(historicalTime) - Date.parse(tower.impact)) / 1000;
+  if (!Number.isFinite(age)) throw new TypeError('A valid historical time is required');
+  const phase = (motion ? Math.max(0, age) * .9 : 0) + index * 2.4;
+  const variation = .85 + .15 * Math.sin(phase);
+  return { visible: age >= 0 && Number(historicalTime) < Date.parse(tower.collapse),
+    x: (index - 4) * 5.2 + (tower.id === 'south' ? 7 : 0),
+    y: tower.face * 33.8,
+    base: tower.impactBase + 3 + seeded(index + 800) * 6,
+    width: 3.5 + seeded(index + 810) * 3,
+    height: (8 + seeded(index + 820) * 10) * variation,
+    opacity: .7 + .1 * Math.sin(phase + 1),
+  };
+}
