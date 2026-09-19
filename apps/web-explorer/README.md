@@ -172,9 +172,9 @@ before contact and select 1× playback; press Play to inspect. Each model appear
 only in the final 12 seconds before impact, disappears at contact, and is followed
 by a muted six-second impact cue and the existing damage/smoke state. There is no
 sound, flash, loop, or independent clock. Reverse scrubbing restores the aircraft.
-Disabling reconstructed motion hides aircraft and transient impact cues; the
+Disabling reconstructed motion keeps aircraft at the selected historical position and hides transient impact cues; the
 historical damage states remain. The simplified fallback retains its damage and
-smoke states and disables the aircraft inspection shortcuts.
+smoke states and provides labeled ground-position dots with dashed approach guides.
 
 The short straight approach uses central estimates from
 [NIST NCSTAR 1, Table 6–4](https://tsapps.nist.gov/publication/get_pdf.cfm?lang=en&pub_id=909017):
@@ -191,3 +191,36 @@ area using a distance filter (with a 1 m tolerance). The former `within` express
 supports points/lines, not building polygons, and allowed modern WTC structures to
 overlap the reconstructed towers. Simplified tower layers also remain explicitly
 hidden whenever the detailed renderer is active, including after toggle changes.
+
+
+### Localized flames
+
+Small flame shapes sit on each tower's damaged facade from impact until collapse
+initiation. They are illustrative fire indicators, not evidence of exact flame
+locations, temperatures, intensity, or fire spread. The detailed renderer uses
+soft translucent flame textures with slow variation driven only by historical
+time. Pause freezes them; reverse scrubbing restores the same shape. Turning off
+Reconstructed motion keeps a static flame shape. The lightweight fallback uses
+small amber facade patches. Both paths remove flames at collapse initiation and
+hide them with the historical reconstruction toggle. No flash, sound, or separate
+animation loop is added.
+
+
+### Final approach guides
+
+Aircraft & estimated approaches is a separate display toggle. Inspection buttons
+frame the full final approach, so the aircraft can be found before the final second.
+Dashed 3D guides follow the same local samples as the aircraft; dashed map lines
+and explicitly labeled dots show their ground projections, including when the
+3D renderer is unavailable. Guides cover the final 12 seconds and clear six seconds
+after impact. Aircraft disappear at contact. Motion-off keeps their selected
+historical position; it does not hide aircraft. No evidence timestamps are changed.
+
+These guides remain extrapolations from NIST's final speed and attitude estimates,
+not exact radar-coordinate tracks or a claim to reconstruct the whole flight.
+The interface links the official NTSB
+[Flight 11](https://www.ntsb.gov/about/Documents/Flight_Path_Study_AA11.pdf) and
+[Flight 175](https://www.ntsb.gov/about/Documents/Flight_Path_Study_UA175.pdf)
+studies for regional route context. Their scanned figures were reviewed; no
+coordinate series has been extracted or relabeled as exact. Their time reference
+is not silently substituted for the NIST event anchors used by this app.

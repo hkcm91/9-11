@@ -66,9 +66,46 @@ test('aircraft approach reaches the impact face and disappears at contact', () =
     assert.equal(contact.y,tower.face*32.1);
     assert.equal(contact.impact,1);
     assert.equal(sampleAircraft(tower,time+6000).impact,0);
-    assert.equal(sampleAircraft(tower,time-1000,false).visible,false);
+    assert.equal(sampleAircraft(tower,time-1000,false).visible,true);
     assert.equal(sampleAircraft(tower,time,false).impact,0);
     sampleAircraft(tower,time+20000);
     assert.deepEqual(sampleAircraft(tower,time-1000),before);
+  }
+});
+
+import { sampleFlame } from './replay.mjs';
+test('flames respect each impact/collapse boundary, rewind, and static mode', () => {
+  for (const tower of TOWERS) {
+    const impact=Date.parse(tower.impact), collapse=Date.parse(tower.collapse);
+    assert.equal(sampleFlame(tower,impact-1,0).visible,false);
+    assert.equal(sampleFlame(tower,impact,0).visible,true);
+    assert.equal(sampleFlame(tower,collapse-1,0).visible,true);
+    assert.equal(sampleFlame(tower,collapse,0).visible,false);
+    const earlier=sampleFlame(tower,impact+1000,3);
+    sampleFlame(tower,collapse+1000,3);
+    assert.deepEqual(sampleFlame(tower,impact+1000,3),earlier);
+    assert.deepEqual(sampleFlame(tower,impact+1000,3,false),sampleFlame(tower,impact+100000,3,false));
+    for(let i=0;i<9;i++) {
+      const flame=sampleFlame(tower,impact+2000,i);
+      assert.ok(flame.base>=tower.impactBase && flame.base+flame.height<=tower.impactTop);
+      assert.ok(flame.y*tower.face>33);
+    }
+  }
+});
+
+
+import { approachTrack, aircraftMapData, aircraftCoordinate } from './replay.mjs';
+test('route guides match aircraft positions, clear after contact, and rewind',()=>{
+  for(const tower of TOWERS) {
+    const impact=Date.parse(tower.impact), track=approachTrack(tower);
+    assert.equal(track.length,25);
+    assert.deepEqual(aircraftCoordinate(tower,track[8]),aircraftCoordinate(tower,sampleAircraft(tower,impact-8000)));
+    const data=aircraftMapData(impact-8000);
+    assert.equal(data.features.length,2);
+    assert.deepEqual(data.features.find(f=>f.properties.kind==='aircraft').geometry.coordinates,data.features[0].geometry.coordinates[8]);
+    assert.equal(aircraftMapData(impact).features.length,1);
+    assert.equal(aircraftMapData(impact+6000).features.length,0);
+    assert.equal(aircraftMapData(impact-12001).features.length,0);
+    assert.deepEqual(aircraftMapData(impact-8000),data);
   }
 });

@@ -4,7 +4,7 @@ import { getSceneState, SCENE_LAYERS, updateSceneSources, TOWERS } from "./scene
 
 import { timeBounds, matchesHistoricalTime, summarizeTimes } from "./evidence-time.mjs";
 
-import { sampleReplay } from "./replay.mjs";
+import { sampleReplay, aircraftMapData, approachTrack, aircraftCoordinate } from "./replay.mjs";
 
 const DATA_URL = "./data/explorer.json";
 
@@ -335,6 +335,7 @@ function addHistoricalLayers() {
         ["get", "kind"],
         "antenna", "#ded6c7",
         "damage", "#443b37",
+        "flame", "#ce843e",
         "debris", "#8e877b",
         "#c3c7c7",
       ],
@@ -382,6 +383,16 @@ function addHistoricalLayers() {
     },
   });
 
+  state.map.addSource("aircraft-tracks", {type:"geojson",data:{type:"FeatureCollection",features:[]}});
+  state.map.addLayer({id:"aircraft-routes",type:"line",source:"aircraft-tracks",filter:["==",["get","kind"],"route"],
+    paint:{"line-color":"#c1af83","line-width":2,"line-opacity":.65,"line-dasharray":[3,3]}});
+  state.map.addLayer({id:"aircraft-positions",type:"circle",source:"aircraft-tracks",filter:["==",["get","kind"],"aircraft"],
+    paint:{"circle-radius":4,"circle-color":"#d8d4c6","circle-stroke-color":"#172630","circle-stroke-width":2}});
+  state.map.addLayer({id:"aircraft-labels",type:"symbol",source:"aircraft-tracks",filter:["==",["get","kind"],"aircraft"],
+    layout:{"text-field":["get","label"],"text-font":["Noto Sans Regular"],"text-size":11,"text-offset":[0,1.3],"text-allow-overlap":true},
+    paint:{"text-color":"#eee7d8","text-halo-color":"#132029","text-halo-width":2}});
+  for(const tower of TOWERS) el(`${tower.id}-impact`).disabled=false;
+
   state.map.addSource("selected-heading", {
     type: "geojson",
     data: { type: "FeatureCollection", features: [] },
@@ -416,6 +427,7 @@ function updateLayerVisibility() {
     ["wtc-reference-fill", "wtc-reference-line"],
     el("footprint-toggle").checked,
   );
+  setLayerVisibility(["aircraft-routes","aircraft-positions","aircraft-labels"],el("aircraft-toggle").checked && el("wtc3d-toggle").checked);
   setLayerVisibility(["historical-wtc-labels"], el("wtc3d-toggle").checked);
   setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
   setLayerVisibility(
@@ -547,7 +559,8 @@ function updateHistoricalScene() {
   const scene = getSceneState(time);
   const replay = sampleReplay(time, motion);
   if (state.detailedScene) scene.south = replay.south.status;
-  state.detailedScene?.setTime(time, { motion, visible: el("wtc3d-toggle").checked });
+  state.detailedScene?.setTime(time, { motion, visible: el("wtc3d-toggle").checked, aircraft: el("aircraft-toggle").checked });
+  if(state.mapReady) state.map.getSource("aircraft-tracks").setData(aircraftMapData(time));
   const key = `${scene.north}/${scene.south}`;
   const descriptions = { intact: "intact", impacted: "impact damage / smoke", collapsed: "collapsed / debris", collapsing: "collapse sequence (approx.)" };
   el("scene-status").textContent = `North: ${descriptions[scene.north]} · South: ${descriptions[scene.south]}`;
@@ -963,7 +976,7 @@ function playTimeline() {
     // Subsecond rendering uses the same historical cursor; evidence refreshes each second.
     if (state.detailedScene) {
       const time = new Date(Date.parse(state.payload.window.start) + cursor * 1000);
-      state.detailedScene.setTime(time, { motion: el("scene-motion").checked, visible: el("wtc3d-toggle").checked });
+      state.detailedScene.setTime(time, { motion: el("scene-motion").checked, visible: el("wtc3d-toggle").checked, aircraft: el("aircraft-toggle").checked });
     }
     if (cursor >= Number(timelineEl.max)) { pausePlayback(); return; }
     state.playbackFrame = requestAnimationFrame(tick);
@@ -988,8 +1001,11 @@ function wireControls() {
       pausePlayback();
       setTimelineToIso(new Date(Date.parse(tower.impact) - 8000).toISOString());
       el("play-speed").value = "1";
-      state.map.flyTo({ center: [tower.lng,tower.lat + .0013], zoom: sceneZoom(), pitch: 58,
-        bearing: tower.id === "north" ? 155 : -25, duration: 0 });
+      el("aircraft-toggle").checked=true;el("wtc3d-toggle").checked=true;
+      updateLayerVisibility();updateHistoricalScene();
+      const bounds=new maplibregl.LngLatBounds();
+      approachTrack(tower).forEach(p=>bounds.extend(aircraftCoordinate(tower,p)));
+      state.map.fitBounds(bounds,{padding:80,maxZoom:14.4,pitch:40,bearing:0,duration:0});
     });
   }
   el("south-sequence").addEventListener("click", () => {
@@ -1007,6 +1023,7 @@ function wireControls() {
   untimedEl.addEventListener("change", applyFilters);
   searchEl.addEventListener("input", applyFilters);
   el("footprint-toggle").addEventListener("change", updateLayerVisibility);
+  el("aircraft-toggle").addEventListener("change",()=>{updateLayerVisibility();updateHistoricalScene();});
   el("buildings-toggle").addEventListener("change", updateLayerVisibility);
   el("wtc3d-toggle").addEventListener("change", () => { updateLayerVisibility(); updateHistoricalScene(); });
   el("heading-toggle").addEventListener("change", renderHeading);
