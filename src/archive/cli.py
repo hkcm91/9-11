@@ -211,6 +211,15 @@ def build_parser() -> argparse.ArgumentParser:
     jev_batch.add_argument("--dotenv", type=Path, default=Path(".env"))
     jev_batch.add_argument("--timeout", type=float, default=30.0)
     jev_batch.add_argument("--agent-version", default="jev-http-v1")
+    jev_batch.add_argument("--limit", type=int, default=None)
+
+    jev_calibration = subparsers.add_parser(
+        "analyze-jev-calibration",
+        help="Summarize confidence, routing, and review pressure from Jev decision JSONL",
+    )
+    jev_calibration.add_argument("input", type=Path)
+    jev_calibration.add_argument("--json-output", type=Path, default=None)
+    jev_calibration.add_argument("--markdown-output", type=Path, default=None)
 
     demo = subparsers.add_parser(
         "run-demo-pipeline",
@@ -479,6 +488,18 @@ def main(argv: list[str] | None = None) -> int:
             collection=collection,
             agent_version=args.agent_version,
             proposal_output=args.proposal_output,
+            max_requests=args.limit,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "analyze-jev-calibration":
+        from historical_engine.ai.calibration import write_calibration_report
+
+        payload = write_calibration_report(
+            args.input,
+            json_output=args.json_output,
+            markdown_output=args.markdown_output,
         )
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
