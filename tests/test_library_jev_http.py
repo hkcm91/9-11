@@ -96,3 +96,28 @@ def test_provider_error_does_not_expose_transport_details(tmp_path):
             post()
         assert exc.value.code == 502
         assert b'secret-provider-response' not in exc.value.read()
+
+
+def test_lead_routes_scan_assess_and_review_with_origin_gate(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, _, base, _):
+        identifier = lib.ingest(dict(collection='wikileaks', release_id='test', source_item_id='update',
+            source_url='https://example.org/update', title='Update', format='text'),
+            payload=b'Unknown chemicals. UPDATE: Found supplements.')
+        lib.publish(identifier, True, 'test', 'Source reviewed')
+        def call(path, values, origin=base):
+            request = Request(base + '/api/leads/' + path, data=json.dumps(values).encode(),
+                headers={'Content-Type': 'application/json', 'Origin': origin, 'X-Archive-Request': '1'})
+            with urlopen(request) as response:
+                return json.load(response)
+        with pytest.raises(HTTPError) as exc:
+            call('run', {}, 'https://other.example')
+        assert exc.value.code == 403
+        assert call('scan', {})['created'] == 1
+        assert not provider.calls
+        result = call('run', {})
+        assert len(result['results']) == 1 and len(provider.calls) == 1
+        lead_id = result['results'][0]['id']
+        assert call('review', dict(id=lead_id, status='investigating', note='Verify final update'))['status'] == 'investigating'
+        with urlopen(base + '/api/leads') as response:
+            assert json.load(response)[0]['reviews'][0]['note'] == 'Verify final update'

@@ -269,3 +269,102 @@ $('jev-clear').onclick = () => {
 $('jev-refresh').onclick = checkJev;
 $('jev-question').onchange = () => $('jev-result').replaceChildren();
 checkJev();
+
+let leadBusy = false;
+const botButton = el('button', 'Find and assess up to 3 leads with Jev');
+$('leads-scan').after(botButton);
+botButton.onclick = () => runLeadAction(async () => {
+  const result = await leadAction('run', {});
+  const completed = result.results.filter(row => row.status === 'assessed').length;
+  const failed = result.results.some(row => row.status === 'failed');
+  return result.scan.created + ' new candidates; ' + completed + ' Jev assessments saved.'
+    + (failed ? ' A provider request failed; completed assessments were retained. Retry the remaining lead individually.' : ' All remain unverified leads.');
+});
+async function leadAction(path, values) {
+  const response = await fetch('/api/leads/' + path, {method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Archive-Request': '1'}, body: JSON.stringify(values)});
+  const result = await response.json();
+  if (!response.ok) throw Error(result.error || 'Lead action failed.');
+  return result;
+}
+
+async function runLeadAction(action) {
+  if (leadBusy) return;
+  leadBusy = true;
+  $('leads-scan').disabled = true;
+  botButton.disabled = true;
+  $('leads-status').textContent = 'Working…';
+  try {
+    const message = await action();
+    await loadLeads();
+    $('leads-status').textContent = message;
+  } catch (error) {
+    $('leads-status').textContent = error.message;
+  } finally {
+    leadBusy = false;
+    $('leads-scan').disabled = false;
+    botButton.disabled = false;
+  }
+}
+
+async function loadLeads() {
+  try {
+    const leads = await api('/api/leads');
+    const visible = leads.filter(lead => $('leads-filter').value === 'all' || lead.status === $('leads-filter').value);
+    $('leads-list').replaceChildren();
+    if (!visible.length) $('leads-list').append(el('p', 'No leads in this view. Run a scan to find candidates in published text.'));
+    for (const lead of visible) {
+      const card = el('article', undefined, 'card');
+      card.append(el('div', lead.status + ' · 1 source · Unverified', 'eyebrow'), el('h3', lead.question),
+        el('p', lead.title), el('p', lead.why_it_matters));
+      for (const passage of lead.passages) {
+        card.append(el('h4', passage.role), el('blockquote', passage.text),
+          link('Read full source, page ' + passage.page, pageLink(passage.document_id, passage.page)));
+      }
+      card.append(el('p', lead.limitations, 'meta'));
+      const steps = el('ol');
+      lead.next_steps.forEach(step => steps.append(el('li', step)));
+      card.append(el('h4', 'Next reporting steps'), steps);
+      if (lead.assessment) {
+        const answer = lead.assessment.response;
+        card.append(el('h4', 'Jev assessment: ' + answer.answer.replaceAll('_', ' ')),
+          el('p', lead.assessment.claim), el('p', answer.rationale),
+          el('p', 'Model confidence: ' + Math.round(answer.confidence * 100) + '% · ' + answer.model
+            + ' · Unverified; editorial review required', 'meta'));
+      } else card.append(el('p', lead.discovery, 'meta'));
+      const assess = el('button', lead.assessment ? 'Recheck with Jev (cached when unchanged)' : 'Assess this lead with Jev');
+      assess.onclick = () => runLeadAction(async () => {
+        await leadAction('assess', {id: lead.id});
+        return 'Jev assessment saved with exact source passages. This remains an unverified lead.';
+      });
+      card.append(assess);
+      const review = el('form');
+      const state = el('select');
+      state.setAttribute('aria-label', 'Review status for ' + lead.title);
+      for (const value of ['inbox', 'investigating', 'dismissed']) {
+        const option = el('option', value); option.value = value; state.append(option);
+      }
+      state.value = lead.status;
+      const note = el('input'); note.placeholder = 'Editorial note or reason for dismissal';
+      note.setAttribute('aria-label', 'Review note for ' + lead.title);
+      note.required = true; note.maxLength = 2000;
+      review.append(state, note, el('button', 'Save review'));
+      review.onsubmit = event => {
+        event.preventDefault();
+        runLeadAction(async () => {
+          await leadAction('review', {id: lead.id, status: state.value, note: note.value});
+          return 'Editorial review saved.';
+        });
+      };
+      card.append(review);
+      for (const entry of lead.reviews) card.append(el('p', entry.status + ': ' + entry.note, 'meta'));
+      $('leads-list').append(card);
+    }
+  } catch (error) { $('leads-status').textContent = error.message; }
+}
+$('leads-filter').onchange = loadLeads;
+$('leads-scan').onclick = () => runLeadAction(async () => {
+  const result = await leadAction('scan', {});
+  return result.created + ' new leads; ' + result.pages_examined + ' pages examined. No model calls used.';
+});
+loadLeads();

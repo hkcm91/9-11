@@ -30,7 +30,7 @@ def handler_for(database, objects, *, jev_factory=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path != "/api/compare":
+            if self.path not in {"/api/compare", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
                 return self.respond(404, {"error": "Not found"})
             # No cross-origin browser can initiate a paid call or write proposals.
             host = self.headers.get("Host", "")
@@ -47,6 +47,30 @@ def handler_for(database, objects, *, jev_factory=None):
                 if not 0 < length <= 4096:
                     return self.respond(413, {"error": "Invalid request size"})
                 values = json.loads(self.rfile.read(length))
+                if self.path.startswith('/api/leads/'):
+                    from archive.library_leads import LeadInbox
+                    if not isinstance(values, dict):
+                        raise ValueError('Expected an object')
+                    acquired = comparison_lock.acquire(blocking=False)
+                    if not acquired:
+                        return self.respond(429, {'error': 'Another archive action is running. Try again shortly.'})
+                    library = DocumentLibrary(database, objects)
+                    inbox = LeadInbox(library)
+                    if self.path == '/api/leads/scan':
+                        return self.respond(200, inbox.scan())
+                    if self.path == '/api/leads/run':
+                        provider, status = provider_status()
+                        if not status['configured']:
+                            return self.respond(503, {'error': status['message']})
+                        return self.respond(200, inbox.run(provider))
+                    if not isinstance(values.get('id'), str):
+                        raise ValueError('Choose a lead')
+                    if self.path == '/api/leads/review':
+                        return self.respond(200, inbox.review(values['id'], values.get('status'), values.get('note')))
+                    provider, status = provider_status()
+                    if not status['configured']:
+                        return self.respond(503, {'error': status['message']})
+                    return self.respond(200, inbox.assess(values['id'], provider))
                 if not isinstance(values, dict) or values.get("question") not in {
                         "same_event", "same_entity", "duplicate_or_derivative"}:
                     raise ValueError("Choose a supported comparison question.")
@@ -89,6 +113,9 @@ def handler_for(database, objects, *, jev_factory=None):
                 if parsed.path == "/api/jev/status":
                     _, status = provider_status()
                     return self.respond(200, status)
+                if parsed.path == '/api/leads':
+                    from archive.library_leads import LeadInbox
+                    return self.respond(200, LeadInbox(library).list())
                 if parsed.path == "/api/search":
                     values = parse_qs(parsed.query)
                     return self.respond(200, library.search(values.get("q", [""])[0], values.get("collection", [""])[0], offset=int(values.get("offset", ["0"])[0])))

@@ -134,7 +134,31 @@ redactions remain intact. This is the published narrative, not an unredacted
 military original. Other HTML layouts fail extraction rather than becoming empty
 documents. Original HTML is downloaded as an attachment, never embedded.
 
-## Jev comparisons
+## Reporting lead inbox
+
+The reader's **Lead inbox** pilots one beat: initial accounts followed by updates
+or corrections on the same page. **Find leads in archived text** scans public text
+locally and adds at most 25 new candidates. **Find and assess up to 3 leads with
+Jev** scans, then assesses up to three unassessed inbox candidates. It stops at a
+provider failure and retains completed results. There is no recurring background
+job, automatic publishing, or whole-corpus model upload.
+
+Candidates contain exact source offsets and excerpts for both the initial account
+and later update, full-page links, limitations, and concrete verification steps.
+Whitespace-normalized identical page text is deduplicated; this does not establish
+independent corroboration. Jev assesses the narrow claim that the later passage
+materially revises the same incident's initial assessment. Its result remains a
+proposal, including `unknown` and negative answers. Confidence is not a
+newsworthiness score. Latest discoveries appear first.
+
+Reviewers can move leads to investigating, dismiss them, or return them to the
+inbox with an explanatory note. Review history is retained. Withdrawn documents
+hide their leads and cannot be assessed, even when results were cached. Scope is
+deliberately limited to wording-based candidates on individual pages; cross-document
+chronologies, semantic candidate retrieval, independent corroboration and other
+reporting beats are not implemented. Scanned pages without OCR cannot be searched.
+
+## Page comparisons
 
 The local reader includes a **Compare pages with Jev** panel. Open a page, select
 it as the first comparison page, then select another page as the second. Choose
