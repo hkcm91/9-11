@@ -41,9 +41,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="archive-ingest")
     parser.add_argument(
         "--collection",
+        # A distinct dest: `sample-911da` and `sample-internet-archive` have
+        # their own long-standing `--collection` for the *source's* internal
+        # collection id, and argparse would let the subcommand's value
+        # overwrite this one on a shared dest.
+        dest="engine_collection",
         default=None,
+        metavar="COLLECTION",
         help=(
             "Collection to operate on (for example september11 or demo_history). "
+            "Goes before the subcommand; a subcommand's own --collection still "
+            "means that source's internal collection id. "
             f"TRANSITIONAL: defaults to '{DEFAULT_COLLECTION_ID}' so existing commands "
             "keep working; set HISTORICAL_ENGINE_COLLECTION to change the default."
         ),
@@ -57,12 +65,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     sample_911da = subparsers.add_parser("sample-911da", help="Sample metadata from the September 11 Digital Archive")
     _add_output_args(sample_911da, default_delay=1.0)
-    sample_911da.add_argument("--collection", type=int, default=None)
+    sample_911da.add_argument(
+        "--collection",
+        "--source-collection",
+        dest="source_collection",
+        type=int,
+        default=None,
+        help="September 11 Digital Archive internal collection id (for example 267)",
+    )
     sample_911da.add_argument("--details", action="store_true", help="Enrich each record with Dublin Core XML metadata")
 
     sample_ia = subparsers.add_parser("sample-internet-archive", help="Sample Internet Archive Understanding 9/11 metadata")
     _add_output_args(sample_ia, default_delay=0.5)
-    sample_ia.add_argument("--collection", default="911")
+    sample_ia.add_argument(
+        "--collection",
+        "--source-collection",
+        dest="source_collection",
+        default="911",
+        help="Internet Archive collection slug",
+    )
     sample_ia.add_argument("--details", action="store_true", help="Fetch full item metadata and summarize files")
 
     sample_nist = subparsers.add_parser("sample-nist", help="Inventory public NIST WTC repository entry points")
@@ -187,7 +208,7 @@ def _load_many(paths: list[Path]):
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    collection = resolve_collection(getattr(args, "collection", None))
+    collection = resolve_collection(args.engine_collection)
 
     if args.command == "list-collections":
         from historical_engine.collection_registry import iter_collections
@@ -202,13 +223,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "sample-911da":
         adapter = September11DigitalArchiveAdapter(request_delay_s=args.delay)
-        records = adapter.sample(limit=args.limit, collection_id=args.collection, enrich=args.details)
+        records = adapter.sample(limit=args.limit, collection_id=args.source_collection, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")
         return 0
 
     if args.command == "sample-internet-archive":
-        adapter = InternetArchiveAdapter(collection=args.collection, request_delay_s=args.delay)
+        adapter = InternetArchiveAdapter(collection=args.source_collection, request_delay_s=args.delay)
         records = adapter.sample(limit=args.limit, enrich=args.details)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} metadata records to {args.output}")

@@ -40,6 +40,14 @@ def resolve_collection(collection: Collection | str | None = None) -> Collection
     """Return a collection from an instance, an id, or the transitional default."""
 
     if collection is not None and not isinstance(collection, str):
+        # Anything that is not an id must already be a collection. Checked
+        # rather than assumed: an int or a stray argparse value passed through
+        # silently here would fail much later with a baffling error.
+        if not hasattr(collection, "id") or not hasattr(collection, "classify_record"):
+            raise TypeError(
+                "collection must be a collection id or a Collection, got "
+                f"{type(collection).__name__}: {collection!r}"
+            )
         return collection
 
     from historical_engine.collection_registry import get_collection
