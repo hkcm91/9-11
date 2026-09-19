@@ -144,3 +144,32 @@ def test_stream_7z_headerless_csv_sample(tmp_path: Path, monkeypatch) -> None:
     assert "ReportKey,DateOccurred" in text
     assert "report-1" in text
     assert "report-2" not in text
+
+
+def test_stream_sample_skips_invalid_rows_until_limit(tmp_path: Path, monkeypatch) -> None:
+    body = (
+        '1,"12/28/1966 18:48",,"Embassy Buenos Aires",UNCLASSIFIED,66STATE106206,"P R HEADER","bad row"\n'
+        '2,"01/02/1967 09:00",67STATE000002,"Secretary of State",CONFIDENTIAL,66BUENOSAIRES2481,"P R HEADER 2","Cable body two"\n'
+        '3,"01/03/1967 09:00",67STATE000003,"Secretary of State",CONFIDENTIAL,66BUENOSAIRES2481,"P R HEADER 3","Cable body three"\n'
+    ).encode("utf-8")
+
+    monkeypatch.setattr(
+        "evidence_collections.wikileaks.remote_sources._open",
+        lambda url, timeout=60.0: io.BytesIO(body),
+    )
+
+    output = tmp_path / "plusd.csv"
+    result = stream_csv_sample(
+        "https://example.test/cables.csv",
+        output,
+        limit=2,
+        fieldnames=CABLEGATE_FIELDS,
+        required_any=("reference",),
+    )
+
+    assert result["records"] == 2
+    assert result["skipped_invalid_rows"] == 1
+    text = output.read_text(encoding="utf-8")
+    assert "bad row" not in text
+    assert "67STATE000002" in text
+    assert "67STATE000003" in text

@@ -256,6 +256,7 @@ def stream_csv_sample(
     limit: int = 100,
     timeout: float = 60.0,
     fieldnames: list[str] | None = None,
+    required_any: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Read only the first N CSV records and write a normalized local sample.
 
@@ -270,6 +271,7 @@ def stream_csv_sample(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     count = 0
+    skipped_invalid = 0
     resolved_fields: list[str] = []
 
     try:
@@ -288,7 +290,15 @@ def stream_csv_sample(
                 writer.writeheader()
                 for row in reader:
                     if not any(str(value or "").strip() for value in row.values()):
+                        skipped_invalid += 1
                         continue
+
+                    if required_any and not any(
+                        str(row.get(field) or "").strip() for field in required_any
+                    ):
+                        skipped_invalid += 1
+                        continue
+
                     writer.writerow(dict(row))
                     count += 1
                     if count >= limit:
@@ -307,6 +317,8 @@ def stream_csv_sample(
         "records": count,
         "columns": resolved_fields,
         "remote_headerless": fieldnames is not None,
+        "skipped_invalid_rows": skipped_invalid,
+        "required_any": list(required_any),
     }
 
 
@@ -330,6 +342,7 @@ def fetch_default_real_samples(
         limit=limit,
         timeout=timeout,
         fieldnames=CABLEGATE_FIELDS,
+        required_any=("reference",),
     )
     war = stream_csv_sample(
         war_diary_url,
@@ -337,6 +350,7 @@ def fetch_default_real_samples(
         limit=limit,
         timeout=timeout,
         fieldnames=WAR_DIARY_FIELDS,
+        required_any=("ReportKey", "TrackingNumber"),
     )
 
     return {
