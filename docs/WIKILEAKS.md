@@ -406,3 +406,39 @@ usage metadata where available.
 This stage is deliberately small. Its purpose is to evaluate whether Jev's
 confidence is useful on the archive's actual candidate distribution before
 raising the API-call limit.
+
+
+## Default real-data mirrors
+
+The WikiLeaks sample workflow no longer silently falls back to the two-record
+regression fixture when dataset URLs are blank.
+
+If neither `plusd_url` nor `war_diaries_url` is supplied, it now fetches
+bounded real samples automatically:
+
+- **Cablegate / PlusD** — discovers the CSV file at runtime from the Internet
+  Archive item `wikileaks-cables-csv`. The original WikiLeaks release remains
+  the canonical source; Internet Archive is used only as a transport mirror.
+- **Iraq War Logs** — streams `iraq1.csv` from the public
+  `FreGeh/iraq-war-logs` GitHub mirror for validation.
+
+The fetcher parses the remote CSV stream and stops after the requested number of
+records, so the workflow does not download the full multi-gigabyte Cablegate
+CSV merely to create a 100-record sample.
+
+Run locally:
+
+```bash
+archive-ingest fetch-wikileaks-real-samples \
+  --output-dir artifacts/input \
+  --limit 100 \
+  --manifest artifacts/reports/bulk-source-manifest.json
+```
+
+The manifest records the resolved mirror URLs, record counts, and observed CSV
+columns. This keeps transport provenance explicit.
+
+Explicit workflow URLs still override these defaults. The default-source path
+also enforces requested coverage, so a 100-record run fails if either default
+mirror cannot actually provide 100 normalized records rather than quietly
+dropping back to fixture data.
