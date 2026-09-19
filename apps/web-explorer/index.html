@@ -6,7 +6,8 @@
   <title>September 11 Historical Explorer</title>
   <meta name="description" content="A provenance-first map and timeline for exploring public historical evidence from September 11, 2001.">
   <link rel="preconnect" href="https://unpkg.com">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://tiles.openfreemap.org">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -75,7 +76,15 @@
           <input id="heading-toggle" type="checkbox" checked>
           <span>Selected camera direction</span>
         </label>
-        <p class="fine-print">The street basemap is modern. Historical reference geometry is shown separately and labeled where approximate.</p>
+        <label class="toggle">
+          <input id="buildings-toggle" type="checkbox" checked>
+          <span>3D Lower Manhattan massing</span>
+        </label>
+        <label class="toggle">
+          <input id="wtc3d-toggle" type="checkbox" checked>
+          <span>Historical Twin Towers reconstruction</span>
+        </label>
+        <p class="fine-print">Modern map geometry is subdued. The WTC site is a separate historical reconstruction layer and remains explicitly labeled as reconstructed.</p>
       </section>
 
       <section class="control-section legend-section">
@@ -103,7 +112,7 @@
         <span id="map-window-label">Evidence within ± 5 minutes</span>
       </div>
       <div class="map-note">
-        Modern street basemap · historical overlays shown separately
+        Stylized modern context · historical WTC reconstruction
       </div>
     </section>
 
@@ -169,7 +178,6 @@
     </button>
   </template>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app.js" type="module"></script>
 </body>
 </html>
