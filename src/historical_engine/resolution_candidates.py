@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 import sqlite3
-from dataclasses import asdict
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from historical_engine.ai.questions import DecisionQuestion, DecisionRequest
 
