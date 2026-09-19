@@ -134,7 +134,27 @@ redactions remain intact. This is the published narrative, not an unredacted
 military original. Other HTML layouts fail extraction rather than becoming empty
 documents. Original HTML is downloaded as an attachment, never embedded.
 
-## Reporting lead inbox
+## Jev investigator
+
+**Jev investigator** accepts a question, name, event, or specific claim. Choose
+relevance, supporting evidence, or conflicting evidence; optionally restrict the
+collection. Quick/deeper passes assess at most 3/6 pages. Retrieval removes common
+question words, searches up to 12 terms with FTS OR, reranks up to 80 candidates
+by term coverage, groups identical text, and selects at most two pages per document.
+This is bounded keyword retrieval, not exhaustive semantic or internet search.
+
+Jev sees an exact window around matching text (up to 8,000 characters), plus the
+last 2,000 characters when the page extends beyond that window, to retain late
+updates. Omitted middle text is disclosed. Results include the exact supplied
+passages, source-page links, model judgments, unknowns, caveats and verification
+steps. Runs are saved locally and can be reopened or exported as a JSON evidence
+sheet. Cached assessments avoid repeated calls; provider failure stops the run
+while preserving earlier results. Withdrawal hides saved findings and export
+rechecks source publication. The historical run counts describe the original run.
+No automatic factual answer, publication, autonomous background run or external
+source discovery is implied. Empty results describe this search, not reality.
+
+## Changing-account leads
 
 The reader's **Lead inbox** pilots one beat: initial accounts followed by updates
 or corrections on the same page. **Find leads in archived text** scans public text

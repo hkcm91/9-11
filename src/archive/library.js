@@ -7,13 +7,13 @@ let jevBusy = false;
 const comparisonPages = {left: null, right: null};
 
 function showView(view) {
-  if (!['archive', 'leads', 'jev'].includes(view)) view = 'archive';
+  if (!['archive', 'leads', 'jev', 'research'].includes(view)) view = 'archive';
   document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
   document.querySelectorAll('[data-view]').forEach(button => {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
-  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons'}[view];
+  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons', research: 'Jev investigator'}[view];
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-view]').forEach(button => {
@@ -395,3 +395,88 @@ $('leads-scan').onclick = () => runLeadAction(async () => {
   return result.created + ' new leads; ' + result.pages_examined + ' pages examined. No model calls used.';
 });
 loadLeads();
+
+let researchBusy = false;
+function renderResearch(result) {
+  const box = $('research-result');
+  box.replaceChildren(el('h2', result.question), el('p', result.scope, 'meta'),
+    el('p', result.candidate_pages + ' candidate pages · ' + result.assessed_pages
+      + ' assessed in this run · ' + result.model_calls + ' model calls · ' + result.cached + ' cached assessments'));
+  box.append(el('p', 'Search terms: ' + result.search_terms.join(', '), 'meta'));
+  if (result.withdrawn_findings) box.append(el('p', result.withdrawn_findings + ' findings hidden because their sources were withdrawn.', 'warning'));
+  if (result.status === 'partial') box.append(el('p', 'This investigation stopped early. Completed evidence is saved; rerun to retry.', 'warning'));
+  if (!result.findings.length) box.append(el('p', 'No evidence is available for this pass. Try another name, spelling, date, or collection. This is not proof that no evidence exists.'));
+  for (const finding of result.findings) {
+    const card = el('article', undefined, 'card');
+    card.append(el('h3', finding.title), link('Read full source · page ' + finding.page, pageLink(finding.document_id, finding.page)));
+    if (finding.assessment) {
+      const answer = finding.assessment.response;
+      card.append(el('h4', answer.answer.replaceAll('_', ' ')), el('p', answer.rationale),
+        el('p', 'Model confidence: ' + Math.round(answer.confidence * 100) + '% · ' + answer.model
+          + ' · Unverified assessment', 'meta'));
+    } else card.append(el('p', finding.error, 'warning'));
+    const evidence = el('details');
+    evidence.append(el('summary', 'Exact evidence supplied to Jev'));
+    for (const passage of finding.passages) {
+      const quote = el('blockquote', passage.text); quote.style.whiteSpace = 'pre-wrap';
+      evidence.append(quote);
+    }
+    if (finding.excerpted) evidence.append(el('p', 'Excerpts only. Intervening text may be omitted; read the full page.', 'warning'));
+    card.append(evidence);
+    box.append(card);
+  }
+  const limitations = el('ul');
+  result.limitations.forEach(item => limitations.append(el('li', item)));
+  const steps = el('ol'); result.next_steps.forEach(item => steps.append(el('li', item)));
+  box.append(el('h3', 'Limits of this search'), limitations, el('h3', 'Next reporting steps'), steps);
+  const download = el('button', 'Export evidence sheet');
+  download.onclick = async () => {
+    try {
+      // Recheck publication before exporting an older view.
+      const current = await api('/api/research/' + encodeURIComponent(result.id));
+      const url = URL.createObjectURL(new Blob([JSON.stringify(current, null, 2)], {type: 'application/json'}));
+      const anchor = link('Export', url); anchor.download = 'investigation-' + current.id.slice(0, 10) + '.json';
+      anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { $('research-status').textContent = error.message; }
+  };
+  box.append(download);
+}
+
+async function researchHistory() {
+  try {
+    const rows = await api('/api/research');
+    $('research-history').replaceChildren();
+    for (const row of rows) {
+      const button = el('button', row.question);
+      button.style.margin = '8px';
+      button.onclick = async () => {
+        if (researchBusy) return;
+        try { renderResearch(await api('/api/research/' + encodeURIComponent(row.id))); }
+        catch (error) { $('research-status').textContent = error.message; }
+      };
+      $('research-history').append(button);
+    }
+  } catch { $('research-history').textContent = 'Investigation history unavailable.'; }
+}
+
+$('research-form').onsubmit = async event => {
+  event.preventDefault();
+  if (researchBusy) return;
+  researchBusy = true;
+  $('research-run').disabled = true;
+  $('research-status').textContent = 'Searching archived text and assessing source passages. This may take a few minutes…';
+  $('research-result').replaceChildren();
+  try {
+    const response = await fetch('/api/research', {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Archive-Request': '1'},
+      body: JSON.stringify({question: $('research-question').value, mode: $('research-mode').value,
+        collection: $('research-collection').value, budget: Number($('research-budget').value)})});
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error || 'Investigation unavailable.');
+    renderResearch(result);
+    $('research-status').textContent = result.status === 'partial' ? 'Partial investigation saved.' : 'Investigation saved. Review the source evidence before drawing conclusions.';
+    await researchHistory();
+  } catch (error) { $('research-status').textContent = error.message; }
+  finally { researchBusy = false; $('research-run').disabled = false; }
+};
+researchHistory();

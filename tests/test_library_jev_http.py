@@ -121,3 +121,21 @@ def test_lead_routes_scan_assess_and_review_with_origin_gate(tmp_path):
         assert call('review', dict(id=lead_id, status='investigating', note='Verify final update'))['status'] == 'investigating'
         with urlopen(base + '/api/leads') as response:
             assert json.load(response)[0]['reviews'][0]['note'] == 'Verify final update'
+
+
+def test_research_endpoint_history_and_origin_gate(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (_, _, base, _):
+        body = json.dumps(dict(question='Original passage', budget=1)).encode()
+        headers = {'Content-Type': 'application/json', 'Origin': 'https://other.example', 'X-Archive-Request': '1'}
+        with pytest.raises(HTTPError) as exc:
+            urlopen(Request(base + '/api/research', data=body, headers=headers))
+        assert exc.value.code == 403 and not provider.calls
+        headers['Origin'] = base
+        with urlopen(Request(base + '/api/research', data=body, headers=headers)) as response:
+            result = json.load(response)
+        assert result['assessed_pages'] == 1
+        with urlopen(base + '/api/research') as response:
+            assert json.load(response)[0]['id'] == result['id']
+        with urlopen(base + '/api/research/' + result['id']) as response:
+            assert json.load(response)['findings'][0]['passages'][0]['text']

@@ -30,7 +30,7 @@ def handler_for(database, objects, *, jev_factory=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path not in {"/api/compare", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
+            if self.path not in {"/api/compare", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
                 return self.respond(404, {"error": "Not found"})
             # No cross-origin browser can initiate a paid call or write proposals.
             host = self.headers.get("Host", "")
@@ -47,6 +47,19 @@ def handler_for(database, objects, *, jev_factory=None):
                 if not 0 < length <= 4096:
                     return self.respond(413, {"error": "Invalid request size"})
                 values = json.loads(self.rfile.read(length))
+                if self.path == '/api/research':
+                    from archive.library_research import ResearchDesk
+                    if not isinstance(values, dict):
+                        raise ValueError('Expected an object')
+                    acquired = comparison_lock.acquire(blocking=False)
+                    if not acquired:
+                        return self.respond(429, {'error': 'Another investigation is running. Try again shortly.'})
+                    provider, status = provider_status()
+                    if not status['configured']:
+                        return self.respond(503, {'error': status['message']})
+                    library = DocumentLibrary(database, objects)
+                    return self.respond(200, ResearchDesk(library).run(values.get('question'), provider,
+                        values.get('mode', 'relevance'), values.get('collection', ''), values.get('budget', 3)))
                 if self.path.startswith('/api/leads/'):
                     from archive.library_leads import LeadInbox
                     if not isinstance(values, dict):
@@ -116,6 +129,10 @@ def handler_for(database, objects, *, jev_factory=None):
                 if parsed.path == '/api/leads':
                     from archive.library_leads import LeadInbox
                     return self.respond(200, LeadInbox(library).list())
+                if parsed.path == '/api/research' or parsed.path.startswith('/api/research/'):
+                    from archive.library_research import ResearchDesk
+                    desk = ResearchDesk(library)
+                    return self.respond(200, desk.history() if parsed.path == '/api/research' else desk.get(parsed.path.rsplit('/', 1)[-1]))
                 if parsed.path == "/api/search":
                     values = parse_qs(parsed.query)
                     return self.respond(200, library.search(values.get("q", [""])[0], values.get("collection", [""])[0], offset=int(values.get("offset", ["0"])[0])))
