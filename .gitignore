@@ -8,6 +8,11 @@ dist/
 artifacts/library.sqlite*
 artifacts/library-objects/
 artifacts/pentagon-papers-index.pdf
+artifacts/pentagon-catalog.html
+artifacts/cablegate-metadata.json
+artifacts/cablegate-sample/
+artifacts/cablegate-validated/
+examples/library/*.source.html
 
 # Local credentials / environment
 .env

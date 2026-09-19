@@ -9,7 +9,7 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, TextIO
+from typing import Any, Callable, Iterator, TextIO
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -257,6 +257,7 @@ def stream_csv_sample(
     timeout: float = 60.0,
     fieldnames: list[str] | None = None,
     required_any: tuple[str, ...] = (),
+    row_filter: Callable[[dict], bool] | None = None,
 ) -> dict[str, Any]:
     """Read only the first N CSV records and write a normalized local sample.
 
@@ -296,6 +297,10 @@ def stream_csv_sample(
                     if required_any and not any(
                         str(row.get(field) or "").strip() for field in required_any
                     ):
+                        skipped_invalid += 1
+                        continue
+
+                    if row_filter is not None and not row_filter(row):
                         skipped_invalid += 1
                         continue
 

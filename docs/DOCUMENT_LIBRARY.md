@@ -33,7 +33,57 @@ command accepts normalized JSONL from existing Cablegate and War Diary adapters.
 It preserves each exact input line as an object and links the upstream record ID
 in metadata. The new source observation is explicitly namespaced to its release.
 
-## Source manifest contract
+## Larger source batches
+
+```sh
+python -m pip install -e '.[dev,bulk-documents]'
+archive-library discover-pentagon --output examples/library/pentagon-papers.json
+archive-library inventory examples/library/pentagon-papers.json
+archive-library bulk-ingest examples/library/pentagon-papers.json --max-total-mib 1024 --max-file-mib 600
+archive-library inventory
+archive-library fetch-cablegate --limit 1000 --output-dir artifacts/cablegate-validated
+```
+
+The checked-in Pentagon Papers manifest contains all 49 PDF links from the
+National Archives catalog snapshot, each with a catalog identifier and source
+URL. Discovery saves the original catalog HTML locally and a small provenance
+receipt with its checksum. Unexpected PDF hosts, ambiguous rows, and duplicate
+catalog identifiers fail discovery rather than silently producing partial data.
+`--html` can reproduce discovery from a saved catalog snapshot.
+
+`bulk-ingest` streams files to disk in 1 MiB chunks, checks their hashes, then
+parses PDFs from disk. Optional PyMuPDF accelerates larger volumes; pypdf remains
+the fallback. Extraction method/version is recorded, and new document identity
+includes the extractor version. Existing citation IDs remain valid.
+
+The default batch budget is 1 GiB and the per-file ceiling is 600 MiB. The
+streaming limit uses at most one extra byte to detect overflow when a source
+does not advertise its length. Over-budget files are deferred, not counted as
+imported. Completed objects are atomic; interrupted partial downloads are not
+promoted. Rerun the same command to continue. Previously indexed versions are
+verified and skipped without network reads, and failed extraction can reuse a
+preserved download. `--refresh` explicitly checks sources again; `--limit` caps
+the number of manifest items considered. There is no byte-range partial resume
+or unattended retry loop yet.
+
+Inventory coverage distinguishes discovered, processed, failed, pending, and
+published items. Publication remains a separate per-document operation. The
+reader fetches one page at a time; its previous/next/jump controls and copied
+citations work with full volumes. Downloads stream from the verified object
+instead of loading a whole PDF into memory. Search excerpts center on matches.
+
+The Cablegate command reuses the existing Internet Archive mirror adapter. It
+requires eight complete CSV fields, a plausible formal cable reference, and a
+nonempty body, skipping malformed fragments while seeking the requested count.
+The source CSV, normalized JSONL, checksum, skipped-row counts, mirror URL, and
+retrieval time are retained under the output directory. This is a bounded sample,
+not full-release coverage; row validation does not verify the source's assertions
+or certify that the mirror includes every passage of the original cable.
+Imported cables remain unpublished for source review. Quarantined imports cannot
+be approved for publication. Repeated identical normalized rows retain their
+identity rather than creating versions from a changed retrieval timestamp.
+
+## Source manifest fields
 
 A JSON array supplies `collection`, `release_id`, `source_item_id`, `source_url`,
 `title`, and `format` for every item. Supported collection IDs are `september11`,
@@ -82,20 +132,21 @@ There is no automatic identity merge, claim verification, or public AI answer.
 | Collection | Discovery starting point | Next adapter work |
 | --- | --- | --- |
 | WikiLeaks | Existing `docs/WIKILEAKS.md`, collection adapters and release registry | Full-file manifests per publication; normalized JSONL bridge already works |
-| Pentagon Papers | https://www.archives.gov/research/pentagon-papers | Enumerate each catalog volume; initial index manifest included |
+| Pentagon Papers | https://www.archives.gov/research/pentagon-papers | Complete 49-PDF catalog manifest and bulk import available |
 | Snowden | https://github.com/joshbegley/NSA-Stories | Resolve publisher document links and record unavailable items |
 | Epstein | https://www.justice.gov/epstein | Release/docket/exhibit manifests, redaction and victim-privacy review |
 | 9/11 | Existing collection source registry | Export document records into the shared library |
 
 ## Deliberate limits / next milestones
 
-This is a local, sequential pilot, not the production bulk archive. Imports are
-bounded to 50 MiB/file and 2,000 PDF pages. Encrypted files are rejected. Larger
-volumes need a streaming worker and explicit resource budgets. The present PDF
-parser runs in the operator process; isolate it before accepting untrusted bulk
-inputs. HTTPS reads have a 30-second socket timeout and no automatic retry loop.
+This is a local, sequential archive, not the production service. The original
+`ingest` command remains bounded to 50 MiB/file; `bulk-ingest` supports larger
+PDFs within explicit byte budgets. Both cap PDF extraction at 2,000 pages per
+file and reject encrypted files. The PDF parser runs in the operator process;
+isolate it before accepting untrusted bulk inputs. Bulk HTTPS reads have a
+60-second socket timeout. Restore/load testing is still required for deployment.
 
-Still to implement: complete release discovery, OCR workers and page coordinates,
+Still to implement: release discovery beyond the Pentagon Papers, OCR workers and page coordinates,
 attachment extraction, HTML/email formats, PostgreSQL/object-service deployment,
 background queues, source change schedules, publication redaction tooling,
 authenticated production review, date filters, saved sets, semantic retrieval,

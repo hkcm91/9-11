@@ -57,6 +57,8 @@ The [public-interest document library](docs/DOCUMENT_LIBRARY.md) adds a local
 searchable reader, preserved document versions, page citations, and Jev-assisted
 comparisons alongside the existing map. Start with `archive-library serve` after
 installing `.[documents]` and importing/reviewing a source manifest.
+For the 49-file National Archives Pentagon Papers inventory, restartable bulk
+downloads, and validated Cablegate samples, see the guide's larger-source batches.
 
 | Document | What it covers |
 | --- | --- |

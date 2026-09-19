@@ -19,12 +19,13 @@ archive-library = "archive.library_cli:main"
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 documents = ["pypdf>=5"]
+bulk-documents = ["pypdf>=5", "pymupdf>=1.25"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"archive" = ["library.html"]
+"archive" = ["library.html", "library.js"]
 # Collections ship their ontology, source registry and fixtures as data.
 "evidence_collections.september11" = ["*.yaml", "anchors/*.json"]
 "evidence_collections.demo_history" = ["*.yaml", "fixtures/*.jsonl"]

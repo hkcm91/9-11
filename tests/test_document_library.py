@@ -140,7 +140,11 @@ def test_http_reader_original_and_hidden_document(library, tmp_path):
             assert error.value.code == 404
         approve(library, identifier)
         with urlopen(base + "/api/documents/" + identifier) as response:
-            assert len(json.load(response)["pages"]) == 2
+            metadata = json.load(response)
+            assert metadata["page_count"] == 2
+            assert "pages" not in metadata
+        with urlopen(base + "/api/documents/" + identifier + "/pages/2") as response:
+            assert json.load(response)["text"].startswith("Second page")
         with urlopen(base + "/api/documents/" + identifier + "/original") as response:
             assert response.headers["Content-Disposition"].startswith("attachment")
             assert digest(response.read()) == library.document(identifier)["sha256"]

@@ -13,11 +13,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: python -m pip install -e .[dev,documents]
+      - run: python -m pip install -e .[dev,bulk-documents]
       - run: pytest -q
       - name: Check Explorer JavaScript syntax
         run: |
           node --check apps/web-explorer/app.js
+          node --check src/archive/library.js
           node --check apps/web-explorer/tower-layer.mjs
       - name: Test Explorer historical scene
         run: node --test apps/web-explorer/*.test.mjs
