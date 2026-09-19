@@ -19,6 +19,11 @@ from historical_engine.ai.fakes import (
 )
 from historical_engine.ai.jev import JevDecisionProvider, JevTransport
 from historical_engine.ai.pipeline import AssistedDecision, run_decision
+from historical_engine.ai.typesafe_config import (
+    TypeSafeConfig,
+    load_env_file,
+    typesafe_config_from_env,
+)
 from historical_engine.ai.providers import (
     AiProposalError,
     AiProviderError,
@@ -63,9 +68,12 @@ __all__ = [
     "PROPOSAL_TYPE_FOR_QUESTION",
     "ProviderRegistry",
     "TranscriptionProvider",
+    "TypeSafeConfig",
     "VisionProvider",
     "proposal_from_decision",
     "run_decision",
+    "load_env_file",
+    "typesafe_config_from_env",
     "validate_decision",
     "write_decision_batch",
 ]
