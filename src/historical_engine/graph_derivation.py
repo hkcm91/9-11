@@ -23,6 +23,7 @@ def materialize_graph(records: Iterable[SourceRecord], collection: Collection, s
 
     for record in records:
         store.put_source_item(record)
+        counts["records"] += 1
         for obj in collection.hooks.derive_graph(record):
             if isinstance(obj, Entity):
                 store.put_entity(
