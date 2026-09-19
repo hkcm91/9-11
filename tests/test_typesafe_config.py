@@ -62,12 +62,14 @@ def test_safe_status_never_contains_secret(tmp_path: Path, monkeypatch) -> None:
     assert "do-not-print-this" not in rendered
 
 
-def test_missing_endpoint_is_not_ready(monkeypatch) -> None:
+def test_documented_endpoint_is_default(monkeypatch) -> None:
     monkeypatch.setenv("TYPESAFE_API_KEY", "configured")
     monkeypatch.delenv("TYPESAFE_API_URL", raising=False)
+    monkeypatch.delenv("TYPESAFE_MODEL", raising=False)
 
     config = typesafe_config_from_env(load_dotenv=False)
 
     assert config.has_api_key is True
-    assert config.has_api_url is False
-    assert config.ready_for_transport is False
+    assert config.api_url == "https://api.typesafe.ai/v1/systemone"
+    assert config.model == "jev-latest"
+    assert config.ready_for_transport is True
