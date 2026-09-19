@@ -232,3 +232,39 @@ graph
   -> human review
   -> accepted or rejected relationship
 ```
+
+
+## Batch decision runner
+
+The engine now includes a provider-agnostic batch runner for decision queues.
+
+Programmatically:
+
+```python
+from historical_engine.ai import write_decision_batch
+
+summary = write_decision_batch(
+    provider,
+    "artifacts/reports/resolution-candidates.jsonl",
+    "artifacts/reports/resolution-decisions.jsonl",
+    collection=wikileaks_collection,
+    agent_version="...",
+    proposal_output="artifacts/reports/resolution-proposals.jsonl",
+)
+```
+
+The runner:
+
+- loads `DecisionRequest` JSONL
+- rejects cross-collection requests
+- asks the configured `DecisionProvider`
+- validates the provider's answer against the question's closed answer space
+- applies collection-specific confidence routing
+- writes full decision traces
+- writes only validated `proposed` proposal envelopes for rows that survive routing
+
+It cannot create a reviewed/verified graph edge.
+
+The existing `JevDecisionProvider` is the intended first real provider for this
+queue. A concrete Jev transport is deliberately not hard-coded until TypeSafe's
+early-access API documentation supplies a stable endpoint/request contract.
