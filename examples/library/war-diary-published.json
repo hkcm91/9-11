@@ -1,0 +1,12 @@
+[
+  {
+    "collection": "wikileaks",
+    "release_id": "war-diary-published-text",
+    "source_item_id": "7893F7C5-E13B-4C3D-8B4A-75B93202ED14",
+    "title": "War Diary: chemical equipment report and subsequent update",
+    "format": "warlog_html",
+    "source_url": "https://warlogs.wikileaks.org/id/7893F7C5-E13B-4C3D-8B4A-75B93202ED14/",
+    "content_kind": "published_redacted_narrative",
+    "provenance_note": "Full narrative exposed by publisher; original HTML preserved. Publisher redactions retained."
+  }
+]

@@ -89,9 +89,12 @@ async function read() {
     box.replaceChildren(el('div', doc.collection.replaceAll('_', ' '), 'eyebrow'), el('h2', doc.title),
       el('p', 'Release: ' + doc.release_id + ' · ' + doc.page_count + ' pages · Retrieved ' + doc.retrieved_at.slice(0, 10), 'meta'));
     const source = link('Original source', doc.source_url);
+    if (doc.format === 'warlog_html') box.append(el('p', 'Published War Diary narrative. Redactions in the publisher’s text are preserved.', 'meta'));
     source.target = '_blank';
     source.rel = 'noopener noreferrer';
-    if (doc.format === 'record') box.append(el('p', 'Normalized source record: this may contain only metadata, not the full original document.', 'warning'));
+    if (doc.format === 'record') box.append(el('p', doc.metadata.content_kind === 'full_mirror_text'
+      ? 'Full cable text from the Internet Archive mirror. The preserved file contains the normalized source record; completeness against every publisher page has not been independently verified.'
+      : 'Metadata only: this record is not the full original document.', 'warning'));
     box.append(source, document.createTextNode(' · '), link('Download preserved file', '/api/documents/' + doc.id + '/original'));
     const details = el('details');
     details.append(el('summary', 'Source integrity'), el('p', 'SHA-256: ' + doc.sha256, 'meta'));
@@ -132,6 +135,18 @@ async function read() {
       }
     };
     section.append(cite);
+    if (doc.format === 'pdf') {
+      const scan = el('details');
+      scan.append(el('summary', 'View original page'));
+      const picture = el('img');
+      picture.alt = 'Preserved original, page ' + number;
+      picture.style.maxWidth = '100%';
+      picture.loading = 'lazy';
+      picture.src = '/api/documents/' + encodeURIComponent(id) + '/pages/' + number + '/image';
+      picture.onerror = () => picture.replaceWith(el('p', 'Page image unavailable. Download the preserved original to view this page.', 'warning'));
+      scan.append(picture);
+      section.append(scan);
+    }
     section.append(page.needs_ocr
       ? el('p', 'No text was extracted from this page. It may be blank or require OCR; consult the preserved original.', 'warning')
       : highlighted(page.text, 'page-body'));

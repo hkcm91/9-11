@@ -13,7 +13,7 @@ from evidence_collections.wikileaks.remote_sources import (
 def valid_cable_row(row: dict) -> bool:
     return (None not in row and all(isinstance(row.get(field), str) for field in CABLEGATE_FIELDS)
         and bool(re.fullmatch(r"\d{2}[A-Z]+\d+(?:_a)?", row["reference"].strip()))
-        and bool(row["body"].strip()))
+        and bool(row["body"].strip()) and "\ufffd" not in row["body"])
 
 
 def fetch_cablegate(library, output: Path, limit: int = 1000) -> dict:
@@ -23,17 +23,22 @@ def fetch_cablegate(library, output: Path, limit: int = 1000) -> dict:
     url = discover_cablegate_csv_url()
     csv_path = output / "cablegate.csv"
     transport = stream_csv_sample(url, csv_path, limit=limit,
-        fieldnames=CABLEGATE_FIELDS, required_any=("reference",), row_filter=valid_cable_row)
+        fieldnames=CABLEGATE_FIELDS, required_any=("reference",), row_filter=valid_cable_row,
+        escapechar="\\", strict_csv=True)
     sha = file_digest(csv_path)
     transport.update(transport_mirror="Internet Archive", archive_item="wikileaks-cables-csv",
         fetched_at=now(),
-        normalized_csv_sha256=sha, validation="complete-eight-column-row-and-formal-reference-v1",
+        normalized_csv_sha256=sha, validation="backslash-escaped-strict-csv-v2",
         coverage_note="Bounded sample from mirror; not the entire Cablegate release")
     (output / "transport.json").write_text(json.dumps(transport, indent=2), encoding="utf-8")
     adapter = WikiLeaksPlusDAdapter()
     normalized = output / "cablegate.jsonl"
     with normalized.open("w", encoding="utf-8") as handle:
         for item in adapter.import_file(csv_path):
+            reference = item.metadata_raw["reference"].strip()
+            reference = reference if reference.endswith("_a") else reference + "_a"
+            item.source_url = f"https://wikileaks.org/plusd/cables/{reference}.html"
+            item.metadata_raw["content_kind"] = "full_mirror_text"
             item.metadata_raw["transport_url"] = url
             item.metadata_raw["transport_sample_sha256"] = sha
             item.metadata_raw["transport_sample_records"] = transport["records"]
@@ -42,7 +47,7 @@ def fetch_cablegate(library, output: Path, limit: int = 1000) -> dict:
             # in document identity: re-fetching identical rows must not fork versions.
             record.pop("ingested_at", None)
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    results = library.import_records(normalized, "wikileaks", "cablegate-ia-validated-sample")
+    results = library.import_records(normalized, "wikileaks", "cablegate-ia-fulltext-v2")
     return {"sampled": transport["records"], "processed": sum(row["status"] == "processed" for row in results),
         "failed": sum(row["status"] == "failed" for row in results),
         "publication": "unpublished; pending source review", "transport": transport}

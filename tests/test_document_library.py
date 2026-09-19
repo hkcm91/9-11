@@ -163,6 +163,33 @@ def test_cli_failure_exit_code(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)[0]["status"] == "failed"
 
 
+def test_original_page_image_respects_publication_and_page_bounds(library, tmp_path):
+    import pymupdf
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((40, 40), "Original contents")
+        payload = pdf.tobytes()
+    identifier = library.ingest({**entry(tmp_path), "format": "pdf"}, payload=payload)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(library.store.path, library.objects))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}/api/documents/{identifier}/pages/"
+    try:
+        with pytest.raises(HTTPError) as error:
+            urlopen(base + "1/image")
+        assert error.value.code == 404
+        approve(library, identifier)
+        with urlopen(base + "1/image") as response:
+            assert response.headers["Content-Type"] == "image/png"
+            assert response.read().startswith(b"\x89PNG\r\n\x1a\n")
+        with pytest.raises(HTTPError) as error:
+            urlopen(base + "2/image")
+        assert error.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_existing_wikileaks_record_bridge(library, tmp_path):
     from pathlib import Path
     source = Path(__file__).parents[1] / "src/evidence_collections/wikileaks/fixtures/real_sample.jsonl"
@@ -190,3 +217,17 @@ def test_jev_rejects_unsupplied_evidence(library, tmp_path):
         library.compare(identifier, 1, identifier, 2, "same_event", BadProvider())
     assert library.db.execute("SELECT count(*) FROM library_decisions").fetchone()[0] == 0
     assert library.db.execute("SELECT count(*) FROM agent_proposals").fetchone()[0] == 0
+
+
+def test_content_audit_detects_missing_original_and_changed_text(library, tmp_path):
+    from archive.library_audit import audit_content
+    identifier = library.ingest(entry(tmp_path))
+    assert audit_content(library)["documents"] == 0
+    approve(library, identifier)
+    assert audit_content(library)["failed"] == 0
+    with library.db:
+        library.db.execute("UPDATE library_pages SET text='truncated' WHERE document_id=? AND number=1", (identifier,))
+    assert audit_content(library)["failed"] == 1
+    original = library.objects / library.document(identifier)["sha256"]
+    original.unlink()
+    assert audit_content(library)["failed"] == 1

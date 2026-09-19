@@ -33,16 +33,26 @@ def handler_for(database, objects):
                 if parsed.path == "/api/coverage":
                     return self.respond(200, library.coverage(public_only=True))
                 parts = parsed.path.strip("/").split("/")
-                if len(parts) in (3, 4, 5) and parts[:2] == ["api", "documents"]:
+                if len(parts) in (3, 4, 5, 6) and parts[:2] == ["api", "documents"]:
                     doc = library.document(parts[2], include_pages=False)
                     if doc:
                         if len(parts) == 3:
                             return self.respond(200, doc)
+                        if len(parts) == 6 and parts[3] == "pages" and parts[5] == "image" and doc["format"] == "pdf":
+                            number = int(parts[4])
+                            if not library.page(parts[2], number):
+                                return self.respond(404, {"error": "Page not found"})
+                            import pymupdf
+                            with pymupdf.open(library.objects / doc["sha256"]) as pdf:
+                                page = pdf[number - 1]
+                                scale = min(2, 1400 / max(page.rect.width, page.rect.height))
+                                picture = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+                                return self.respond(200, picture.tobytes("png"), "image/png")
                         if len(parts) == 5 and parts[3] == "pages":
                             page = library.page(parts[2], int(parts[4]))
                             if page:
                                 return self.respond(200, page)
-                        if parts[3] == "original":
+                        if len(parts) == 4 and parts[3] == "original":
                             from archive.library_sources import file_digest
                             path = library.objects / doc["sha256"]
                             if file_digest(path) != doc["sha256"]:
@@ -50,7 +60,8 @@ def handler_for(database, objects):
                             self.send_response(200)
                             self.send_header("Content-Type", "application/octet-stream")
                             self.send_header("Content-Length", str(path.stat().st_size))
-                            self.send_header("Content-Disposition", f'attachment; filename="{doc["id"]}.{ "pdf" if doc["format"] == "pdf" else "txt"}"')
+                            extension = {"pdf": "pdf", "warlog_html": "html", "record": "json"}.get(doc["format"], "txt")
+                            self.send_header("Content-Disposition", f'attachment; filename="{doc["id"]}.{extension}"')
                             self.send_header("X-Content-Type-Options", "nosniff")
                             self.send_header("Cache-Control", "no-store")
                             self.end_headers()
@@ -110,6 +121,7 @@ def main(argv=None):
     search.add_argument("query", nargs="?", default="")
     search.add_argument("--collection", default="")
     commands.add_parser("coverage")
+    commands.add_parser("audit-content")
     review = commands.add_parser("publication")
     review.add_argument("document_id")
     review.add_argument("--public", action="store_true", help="Omit to withdraw a document")
@@ -161,6 +173,9 @@ def main(argv=None):
             result = library.search(args.query, args.collection)
         elif args.command == "coverage":
             result = library.coverage()
+        elif args.command == "audit-content":
+            from archive.library_audit import audit_content
+            result = audit_content(library)
         elif args.command == "publication":
             library.publish(args.document_id, args.public, args.reviewer, args.note)
             result = {"document_id": args.document_id, "public": args.public}
@@ -170,7 +185,7 @@ def main(argv=None):
         print(json.dumps(result, indent=2, ensure_ascii=False))
         if args.command == "bulk-ingest":
             return int(any(row["status"] == "failed" for row in result["results"]))
-        if args.command == "fetch-cablegate":
+        if args.command in {"fetch-cablegate", "audit-content"}:
             return int(result["failed"] > 0)
         return int(args.command in {"ingest", "import-records"} and any(row["status"] == "failed" for row in result))
     finally:

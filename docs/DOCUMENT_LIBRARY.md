@@ -111,7 +111,30 @@ versions remain idempotent. Coverage counts the latest attempt per release/item,
 not the number of retries. Public coverage exposes approved version counts only.
 Coverage is relative to submitted manifests, not all material ever published.
 
-## Jev integration
+## Content integrity and reader
+
+`archive-library audit-content` checks every published object's SHA-256, PDF page
+count and contiguous page numbering. For text and source records it also compares
+the stored page text with extraction from the preserved bytes. It exits nonzero
+on failure. This checks local integrity, not historical accuracy or whether a
+publisher/mirror omitted material. PDF pages can be viewed as original scans in
+the reader, including pages awaiting OCR. Rendering requires `bulk-documents`.
+
+Cablegate's Internet Archive CSV uses backslash-escaped quotations. The importer
+now parses that dialect strictly, rejects incomplete rows and replacement
+characters in bodies, preserves the whole body once, and uses `_a` publisher URLs.
+The corrected release is `cablegate-ia-fulltext-v2`; earlier
+`cablegate-ia-validated-sample` imports can contain truncated bodies and must be
+withdrawn/quarantined, not reused. New imports remain unpublished until reviewed.
+The preview labels full mirror text separately from metadata-only records.
+
+The `warlog_html` format preserves original WikiLeaks War Diary HTML and decodes
+its published `var summary` JSON string without running scripts. Publisher
+redactions remain intact. This is the published narrative, not an unredacted
+military original. Other HTML layouts fail extraction rather than becoming empty
+documents. Original HTML is downloaded as an attachment, never embedded.
+
+## Jev comparisons
 
 ```sh
 archive-library compare LEFT_ID RIGHT_ID --left-page 2 --right-page 7 --question same_event

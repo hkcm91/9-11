@@ -258,6 +258,8 @@ def stream_csv_sample(
     fieldnames: list[str] | None = None,
     required_any: tuple[str, ...] = (),
     row_filter: Callable[[dict], bool] | None = None,
+    escapechar: str | None = None,
+    strict_csv: bool = False,
 ) -> dict[str, Any]:
     """Read only the first N CSV records and write a normalized local sample.
 
@@ -277,7 +279,8 @@ def stream_csv_sample(
 
     try:
         with _remote_csv_text_stream(url, timeout=timeout) as text_stream:
-            reader = csv.DictReader(text_stream, fieldnames=fieldnames)
+            reader = csv.DictReader(text_stream, fieldnames=fieldnames,
+                                    escapechar=escapechar, strict=strict_csv)
             resolved_fields = list(reader.fieldnames or [])
             if not resolved_fields:
                 raise BulkSourceError(f"bulk source had no usable CSV schema: {url}")
@@ -348,6 +351,7 @@ def fetch_default_real_samples(
         timeout=timeout,
         fieldnames=CABLEGATE_FIELDS,
         required_any=("reference",),
+        escapechar="\\", strict_csv=True,
     )
     war = stream_csv_sample(
         war_diary_url,

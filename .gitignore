@@ -12,6 +12,11 @@ artifacts/pentagon-catalog.html
 artifacts/cablegate-metadata.json
 artifacts/cablegate-sample/
 artifacts/cablegate-validated/
+artifacts/cablegate-fulltext/
+artifacts/cablegate-prefix.bin
+artifacts/cable-original.html
+artifacts/warlog-original.html
+artifacts/snowden-tree.json
 examples/library/*.source.html
 
 # Local credentials / environment

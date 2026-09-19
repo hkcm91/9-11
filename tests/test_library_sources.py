@@ -150,6 +150,7 @@ def test_cablegate_refetch_preserves_document_identity(tmp_path, monkeypatch):
     from archive import library_cablegate as module
     lib = DocumentLibrary(tmp_path / "library.sqlite", tmp_path / "objects")
     def sample(url, output, **kwargs):
+        assert kwargs["escapechar"] == "\\" and kwargs["strict_csv"]
         row = dict(zip(module.CABLEGATE_FIELDS, ["1", "1972-01-01", "72TEHRAN1164", "TEHRAN", "UNCLASSIFIED", "", "", "Public cable text"]))
         assert kwargs["row_filter"](row)
         with Path(output).open("w", encoding="utf-8", newline="") as handle:
@@ -165,5 +166,39 @@ def test_cablegate_refetch_preserves_document_identity(tmp_path, monkeypatch):
         assert lib.db.execute("SELECT count(*) FROM library_documents").fetchone()[0] == 1
         assert lib.search("cable") == []
         assert lib.inventory_coverage()[0]["discovered"] == 1
+        identifier = lib.db.execute("SELECT id FROM library_documents").fetchone()[0]
+        lib.publish(identifier, True, "test", "Check preserved complete body")
+        doc = lib.document(identifier)
+        assert doc["pages"][0]["text"] == "Public cable text"
+        assert doc["source_url"].endswith("72TEHRAN1164_a.html")
+        assert doc["metadata"]["content_kind"] == "full_mirror_text"
     finally:
         lib.close()
+
+
+def test_cablegate_escaped_quotes_keep_entire_multiline_body(tmp_path, monkeypatch):
+    import csv
+    from contextlib import contextmanager
+    from evidence_collections.wikileaks import remote_sources as source
+    from archive.library_cablegate import valid_cable_row
+    body = 'Opening paragraph.\nA "quoted passage" in the middle.\nFinal paragraph. SIGNED'
+    raw = io.StringIO()
+    csv.writer(raw, escapechar="\\", doublequote=False, quoting=csv.QUOTE_ALL).writerow(
+        ["1", "1966-01-01", "66BUENOSAIRES2481", "BUENOS AIRES", "UNCLASSIFIED", "", "", body])
+    @contextmanager
+    def stream(*args, **kwargs):
+        yield io.StringIO(raw.getvalue())
+    monkeypatch.setattr(source, "_remote_csv_text_stream", stream)
+    output = tmp_path / "sample.csv"
+    result = source.stream_csv_sample("https://example.org/cables.csv", output,
+        limit=1, fieldnames=source.CABLEGATE_FIELDS, row_filter=valid_cable_row,
+        escapechar="\\", strict_csv=True)
+    with output.open(newline="", encoding="utf-8") as handle:
+        assert next(csv.DictReader(handle))["body"] == body
+    assert result["skipped_invalid_rows"] == 0
+    raw.seek(0)
+    raw.truncate()
+    raw.write('"1","1966","66BUENOSAIRES2481","BA","U","","","unfinished')
+    with pytest.raises(source.BulkSourceError, match="unexpected end"):
+        source.stream_csv_sample("https://example.org/cables.csv", output,
+            fieldnames=source.CABLEGATE_FIELDS, escapechar="\\", strict_csv=True)

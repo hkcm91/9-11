@@ -57,12 +57,20 @@ def read_payload(entry: dict, base: Path) -> bytes:
 
 
 def extract_pages(payload: bytes, kind: str) -> tuple[list[str], str]:
+    if kind == "warlog_html":
+        from archive.library_warlog import extract_warlog
+        return [extract_warlog(payload)], "wikileaks-published-summary-v1"
     if kind == "pdf":
         return extract_pdf(io.BytesIO(payload))
     if kind == "text":
         return payload.decode("utf-8-sig").split("\f"), "utf8-formfeed"
     if kind == "record":
         row = json.loads(payload)
+        if (row.get("metadata_raw") or {}).get("content_kind") == "full_mirror_text":
+            body = row["metadata_raw"]["body"]
+            if not isinstance(body, str) or not body.strip():
+                raise ValueError("Full-text record has no body")
+            return [body], "normalized-record-v2"
         lines = ["Normalized source record; may be metadata only."]
         labels = {"title_raw": "Title", "description_raw": "Source description",
                   "creator_raw": "Creator", "date_raw": "Source date",
@@ -73,7 +81,7 @@ def extract_pages(payload: bytes, kind: str) -> tuple[list[str], str]:
                 lines.append(f"{label}: {row[key]}")
         for key, value in (row.get("metadata_raw") or {}).items():
             lines.append(f"{key.replace('_', ' ').capitalize()}: {value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)}")
-        return ["\n\n".join(lines)], "normalized-record-v1"
+        return ["\n\n".join(lines)], "normalized-record-v2"
     raise ValueError("Supported formats: pdf, text, record")
 
 
@@ -95,8 +103,10 @@ def extract_pdf(source) -> tuple[list[str], str]:
 
 
 def extractor_identity(kind: str) -> str:
+    if kind == "warlog_html":
+        return "wikileaks-published-summary-v1"
     if kind != "pdf":
-        return "normalized-record-v1" if kind == "record" else "utf8-formfeed"
+        return "normalized-record-v2" if kind == "record" else "utf8-formfeed"
     try:
         import pymupdf
         return "pymupdf-" + pymupdf.VersionBind
@@ -196,7 +206,7 @@ class DocumentLibrary:
                 raise ValueError(f"Missing manifest field: {field}")
         if entry["collection"] not in COLLECTIONS:
             raise ValueError("Unknown collection")
-        if entry["format"] not in {"pdf", "text", "record"}:
+        if entry["format"] not in {"pdf", "text", "record", "warlog_html"}:
             raise ValueError("Supported formats: pdf, text, record")
         if not entry["source_url"].startswith(("https://", "http://")):
             raise ValueError("A public HTTP(S) source citation is required")
@@ -322,6 +332,9 @@ class DocumentLibrary:
                         source_url=row["source_url"], format="record",
                         document_date=row.get("date_raw"), upstream_record_id=row.get("id"),
                         provenance_note="Preserved normalized source record. May be metadata only; not a complete original document.")
+                    if (row.get("metadata_raw") or {}).get("content_kind") == "full_mirror_text":
+                        metadata["content_kind"] = "full_mirror_text"
+                        metadata["provenance_note"] = "Full cable body from the Internet Archive CSV mirror; normalized record preserved. Completeness against every publisher page has not been independently verified."
                     self.register_inventory([metadata])
                     identifier = self.ingest(metadata, payload=line)
                     result = {"status": "processed", "document_id": identifier, "error": None}
