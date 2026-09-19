@@ -1,51 +1,108 @@
-# Sample workflow for building and deploying a Jekyll site to GitHub Pages
-name: Deploy Jekyll with GitHub Pages dependencies preinstalled
+name: Deploy Explorer to GitHub Pages
 
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
+    paths:
+      - "apps/web-explorer/**"
+      - ".github/workflows/jekyll-gh-pages.yml"
+      - ".github/workflows/phase0-scale.yml"
+  workflow_run:
+    workflows: ["phase0-scale"]
+    types: [completed]
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  # Build job
   build:
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Checkout current Explorer UI
+        uses: actions/checkout@v7
 
-  # Deployment job
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Resolve latest successful scale corpus
+        id: scale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          else
+            RUN_ID="$(gh run list \
+              --workflow phase0-scale.yml \
+              --branch main \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')"
+          fi
+
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "No successful Phase 0 scale run with an Explorer artifact was found." >&2
+            exit 1
+          fi
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Using scale run $RUN_ID"
+
+      - name: Download generated Explorer records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/phase0-scale
+          gh run download "${{ steps.scale.outputs.run_id }}" \
+            --name phase0-scale-corpus \
+            --dir /tmp/phase0-scale
+
+      - name: Assemble Pages site
+        run: |
+          rm -rf _site
+          mkdir -p _site/data
+          cp apps/web-explorer/index.html _site/
+          cp apps/web-explorer/styles.css _site/
+          cp apps/web-explorer/app.js _site/
+          cp /tmp/phase0-scale/explorer/data/explorer.json _site/data/
+          touch _site/.nojekyll
+
+          RECORDS="$(jq -r '.item_count' _site/data/explorer.json)"
+          if [ -z "$RECORDS" ] || [ "$RECORDS" = "null" ] || [ "$RECORDS" -lt 1 ]; then
+            echo "Explorer dataset contains no records." >&2
+            exit 1
+          fi
+          echo "Publishing $RECORDS Explorer records."
+
+      - name: Upload Explorer Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
   deploy:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Deploy Explorer
         id: deployment
         uses: actions/deploy-pages@v5
