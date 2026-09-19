@@ -15,6 +15,11 @@ on:
         description: Maximum records imported from each supplied dataset
         required: false
         default: "100"
+      run_jev:
+        description: Run generated resolution candidates through TypeSafe Jev
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   sample:
@@ -105,6 +110,15 @@ jobs:
             --output artifacts/reports/resolution-candidates.jsonl \
             --max-entity-pairs 500 \
             --max-event-pairs 500
+
+      - name: Run resolution candidates through Jev
+        if: ${{ inputs.run_jev }}
+        run: |
+          archive-ingest --collection wikileaks run-jev-decisions \
+            artifacts/reports/resolution-candidates.jsonl \
+            --output artifacts/reports/resolution-decisions.jsonl \
+            --proposal-output artifacts/reports/resolution-proposals.jsonl \
+            --agent-version jev-http-v1
 
       - name: Validate requested real-batch coverage
         env:
