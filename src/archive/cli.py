@@ -119,6 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
     import_wikileaks_war.add_argument("--output", type=Path, required=True)
     import_wikileaks_war.add_argument("--limit", type=int, default=None)
 
+    fetch_wikileaks_real = subparsers.add_parser(
+        "fetch-wikileaks-real-samples",
+        help="Fetch bounded real Cablegate and Iraq War Logs CSV samples from public mirrors",
+    )
+    fetch_wikileaks_real.add_argument("--output-dir", type=Path, required=True)
+    fetch_wikileaks_real.add_argument("--limit", type=int, default=100)
+    fetch_wikileaks_real.add_argument("--timeout", type=float, default=60.0)
+    fetch_wikileaks_real.add_argument("--manifest", type=Path, default=None)
+
     sample_photo_map = subparsers.add_parser("sample-photo-map", help="Sample geolocated metadata from the public archDisk ArcGIS map")
     _add_output_args(sample_photo_map, default_delay=0.25)
     sample_photo_map.add_argument("--app-id", default="1b7d4d22866b445881b181614e25d4d4")
@@ -340,6 +349,21 @@ def main(argv: list[str] | None = None) -> int:
         records = adapter.import_file(args.input, limit=args.limit)
         _write_jsonl(args.output, records, adapter.serialize_source_item)
         print(f"wrote {len(records)} WikiLeaks War Diaries records to {args.output}")
+        return 0
+
+    if args.command == "fetch-wikileaks-real-samples":
+        from evidence_collections.wikileaks.remote_sources import fetch_default_real_samples
+
+        payload = fetch_default_real_samples(
+            args.output_dir,
+            limit=args.limit,
+            timeout=args.timeout,
+        )
+        rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        if args.manifest:
+            args.manifest.parent.mkdir(parents=True, exist_ok=True)
+            args.manifest.write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
         return 0
 
     if args.command == "sample-photo-map":
