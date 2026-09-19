@@ -80,6 +80,8 @@ jobs:
           cp apps/web-explorer/scene.mjs _site/
           cp apps/web-explorer/evidence-time.mjs _site/
           cp apps/web-explorer/replay.mjs _site/
+          cp apps/web-explorer/ordering.mjs _site/
+          cp apps/web-explorer/ordering.json _site/
           cp apps/web-explorer/tower-layer.mjs _site/
           cp /tmp/phase0-scale/explorer/data/explorer.json _site/data/
           touch _site/.nojekyll

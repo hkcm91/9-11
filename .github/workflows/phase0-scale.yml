@@ -121,6 +121,7 @@ jobs:
           cp apps/web-explorer/styles.css artifacts/explorer/
           cp apps/web-explorer/app.js artifacts/explorer/
           cp apps/web-explorer/*.mjs artifacts/explorer/
+          cp apps/web-explorer/ordering.json artifacts/explorer/
 
       - name: Write scale summary and manifest
         run: |
