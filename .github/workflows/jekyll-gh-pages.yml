@@ -98,10 +98,10 @@ jobs:
           from pathlib import Path
           for name in ("index.html", "app.js"):
               path = Path("_site") / name
-              text = path.read_text()
+              text = path.read_text(encoding="utf-8")
               text = re.sub(r'(\./[\w-]+\.(?:js|mjs|css))(?:\?v=[\w-]+)?',
                             lambda match: match[1] + "?v=" + os.environ["ASSET_VERSION"], text)
-              path.write_text(text)
+              path.write_text(text, encoding="utf-8")
           PY
 
       - name: Upload Explorer Pages artifact
