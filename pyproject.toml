@@ -13,6 +13,7 @@ dependencies = [
 archive-ingest = "archive.cli:main"
 archive-query = "archive.query_cli:main"
 archive-photo-map-info = "archive.photo_map_inventory:main"
+archive-export-explorer = "archive.explorer_export:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
