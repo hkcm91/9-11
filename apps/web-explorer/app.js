@@ -1,3 +1,5 @@
+import * as maplibregl from "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.mjs";
+
 const DATA_URL = "./data/explorer.json";
 
 const EVENT_ANCHORS = [
@@ -9,16 +11,95 @@ const EVENT_ANCHORS = [
   { time: "2001-09-11T10:28:00-04:00", label: "10:28", detail: "North Tower collapse" },
 ];
 
-const WTC_REFERENCE = [
-  {
-    name: "North Tower footprint reference",
-    bounds: [[40.71215, -74.01355], [40.71305, -74.01255]],
+const MAP_STYLE = "https://tiles.openfreemap.org/styles/fiord";
+const MAP_HOME = {
+  center: [-74.0128, 40.7119],
+  zoom: 15.35,
+  pitch: 58,
+  bearing: 27,
+};
+
+const WTC_SITE = {
+  type: "Feature",
+  properties: { name: "World Trade Center historical reconstruction area" },
+  geometry: {
+    type: "Polygon",
+    coordinates: [[
+      [-74.01475, 40.71035],
+      [-74.01155, 40.71035],
+      [-74.01125, 40.71365],
+      [-74.01455, 40.71370],
+      [-74.01475, 40.71035],
+    ]],
   },
-  {
-    name: "South Tower footprint reference",
-    bounds: [[40.71095, -74.01345], [40.71185, -74.01240]],
-  },
-];
+};
+
+function rotatedRectangle(lng, lat, widthM, depthM, bearingDeg, properties = {}) {
+  const theta = bearingDeg * Math.PI / 180;
+  const cosTheta = Math.cos(theta);
+  const sinTheta = Math.sin(theta);
+  const halfW = widthM / 2;
+  const halfD = depthM / 2;
+  const corners = [
+    [-halfW, -halfD],
+    [halfW, -halfD],
+    [halfW, halfD],
+    [-halfW, halfD],
+    [-halfW, -halfD],
+  ].map(([x, y]) => {
+    const east = x * cosTheta - y * sinTheta;
+    const north = x * sinTheta + y * cosTheta;
+    const dLat = north / 111320;
+    const dLng = east / (111320 * Math.cos(lat * Math.PI / 180));
+    return [lng + dLng, lat + dLat];
+  });
+
+  return {
+    type: "Feature",
+    properties,
+    geometry: { type: "Polygon", coordinates: [corners] },
+  };
+}
+
+const WTC_TOWERS = {
+  type: "FeatureCollection",
+  features: [
+    rotatedRectangle(-74.01337, 40.71273, 63.4, 63.4, -28.5, {
+      name: "North Tower",
+      kind: "tower",
+      height: 417,
+      base: 0,
+    }),
+    rotatedRectangle(-74.01339, 40.71173, 63.4, 63.4, -28.5, {
+      name: "South Tower",
+      kind: "tower",
+      height: 415,
+      base: 0,
+    }),
+    rotatedRectangle(-74.01337, 40.71273, 5.2, 5.2, -28.5, {
+      name: "North Tower antenna",
+      kind: "antenna",
+      height: 527,
+      base: 417,
+    }),
+  ],
+};
+
+const WTC_LABELS = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { label: "NORTH TOWER" },
+      geometry: { type: "Point", coordinates: [-74.01337, 40.71273] },
+    },
+    {
+      type: "Feature",
+      properties: { label: "SOUTH TOWER" },
+      geometry: { type: "Point", coordinates: [-74.01339, 40.71173] },
+    },
+  ],
+};
 
 const state = {
   payload: null,
@@ -27,8 +108,7 @@ const state = {
   selectedId: null,
   markers: new Map(),
   map: null,
-  footprintLayer: null,
-  headingLayer: null,
+  mapReady: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -191,36 +271,226 @@ function mediaSymbol(mediaType) {
   return "■";
 }
 
-function initMap() {
-  state.map = L.map("map", {
-    center: [40.7119, -74.0127],
-    zoom: 15,
-    minZoom: 12,
-    maxZoom: 19,
-    zoomControl: true,
+function stylizeBasemap() {
+  for (const layer of state.map.getStyle().layers || []) {
+    try {
+      if (layer.type === "fill-extrusion") {
+        state.map.setLayoutProperty(layer.id, "visibility", "none");
+        continue;
+      }
+
+      const id = layer.id.toLowerCase();
+      if (layer.type === "symbol" && /(poi|shop|amenity|transit|airport|housenumber)/.test(id)) {
+        state.map.setLayoutProperty(layer.id, "visibility", "none");
+      } else if (layer.type === "background") {
+        state.map.setPaintProperty(layer.id, "background-color", "#0f1a21");
+      } else if (layer.type === "fill" && /(water|ocean|river|lake)/.test(id)) {
+        state.map.setPaintProperty(layer.id, "fill-color", "#17303a");
+        state.map.setPaintProperty(layer.id, "fill-opacity", 0.96);
+      } else if (layer.type === "fill" && /(park|landcover|landuse|wood|grass)/.test(id)) {
+        state.map.setPaintProperty(layer.id, "fill-color", "#26353a");
+        state.map.setPaintProperty(layer.id, "fill-opacity", 0.72);
+      } else if (layer.type === "line" && /(road|street|motorway|highway|path)/.test(id)) {
+        state.map.setPaintProperty(layer.id, "line-color", "#69747b");
+        state.map.setPaintProperty(layer.id, "line-opacity", 0.42);
+      }
+    } catch (error) {
+      console.debug("Basemap style layer left unchanged:", layer.id, error);
+    }
+  }
+
+  try {
+    state.map.setLight({
+      anchor: "map",
+      color: "#f3ead7",
+      intensity: 0.42,
+      position: [1.15, 210, 38],
+    });
+  } catch (error) {
+    console.debug("Map light customization unavailable", error);
+  }
+}
+
+function addHistoricalLayers() {
+  const labelLayerId = (state.map.getStyle().layers || [])
+    .find((layer) => layer.type === "symbol" && layer.layout?.["text-field"])?.id;
+
+  state.map.addSource("openfreemap-buildings", {
+    type: "vector",
+    url: "https://tiles.openfreemap.org/planet",
   });
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  }).addTo(state.map);
+  const massingLayer = {
+    id: "city-massing",
+    source: "openfreemap-buildings",
+    "source-layer": "building",
+    type: "fill-extrusion",
+    minzoom: 13.5,
+    filter: [
+      "all",
+      ["!=", ["get", "hide_3d"], true],
+      ["!", ["within", WTC_SITE]],
+    ],
+    paint: {
+      "fill-extrusion-color": "#89939a",
+      "fill-extrusion-height": [
+        "coalesce",
+        ["get", "render_height"],
+        ["get", "height"],
+        10,
+      ],
+      "fill-extrusion-base": [
+        "coalesce",
+        ["get", "render_min_height"],
+        ["get", "min_height"],
+        0,
+      ],
+      "fill-extrusion-opacity": 0.58,
+      "fill-extrusion-vertical-gradient": true,
+    },
+  };
 
-  state.footprintLayer = L.layerGroup().addTo(state.map);
-  for (const footprint of WTC_REFERENCE) {
-    L.rectangle(footprint.bounds, {
-      color: "#c9bfa9",
-      weight: 1,
-      dashArray: "4 3",
-      fillColor: "#b9ab8f",
-      fillOpacity: .08,
-      interactive: true,
-    })
-      .bindTooltip(`${footprint.name} · approximate reference overlay`, {
-        direction: "top",
-        opacity: .9,
-      })
-      .addTo(state.footprintLayer);
+  try {
+    state.map.addLayer(massingLayer, labelLayerId);
+  } catch (error) {
+    console.warn("WTC exclusion expression unavailable; rendering city massing without exclusion.", error);
+    massingLayer.filter = ["!=", ["get", "hide_3d"], true];
+    state.map.addLayer(massingLayer, labelLayerId);
   }
+
+  state.map.addSource("wtc-site", { type: "geojson", data: WTC_SITE });
+  state.map.addLayer({
+    id: "wtc-reference-fill",
+    type: "fill",
+    source: "wtc-site",
+    paint: {
+      "fill-color": "#d9c89f",
+      "fill-opacity": 0.055,
+    },
+  }, labelLayerId);
+  state.map.addLayer({
+    id: "wtc-reference-line",
+    type: "line",
+    source: "wtc-site",
+    paint: {
+      "line-color": "#d9c89f",
+      "line-width": 1.25,
+      "line-opacity": 0.7,
+      "line-dasharray": [3, 2],
+    },
+  }, labelLayerId);
+
+  state.map.addSource("historical-wtc", { type: "geojson", data: WTC_TOWERS });
+  state.map.addLayer({
+    id: "historical-wtc-3d",
+    type: "fill-extrusion",
+    source: "historical-wtc",
+    paint: {
+      "fill-extrusion-color": [
+        "match",
+        ["get", "kind"],
+        "antenna", "#ded6c7",
+        "#c3c7c7",
+      ],
+      "fill-extrusion-height": ["get", "height"],
+      "fill-extrusion-base": ["get", "base"],
+      "fill-extrusion-opacity": 0.97,
+      "fill-extrusion-vertical-gradient": true,
+    },
+  }, labelLayerId);
+
+  state.map.addSource("wtc-labels", { type: "geojson", data: WTC_LABELS });
+  state.map.addLayer({
+    id: "historical-wtc-labels",
+    type: "symbol",
+    source: "wtc-labels",
+    minzoom: 14.2,
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 10,
+      "text-letter-spacing": 0.18,
+      "text-offset": [0, 2.2],
+      "text-anchor": "top",
+      "text-allow-overlap": false,
+    },
+    paint: {
+      "text-color": "#eee7d8",
+      "text-halo-color": "#132029",
+      "text-halo-width": 1.6,
+      "text-opacity": 0.88,
+    },
+  });
+
+  state.map.addSource("selected-heading", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  state.map.addLayer({
+    id: "selected-heading-line",
+    type: "line",
+    source: "selected-heading",
+    layout: { visibility: "none" },
+    paint: {
+      "line-color": "#e5d5b3",
+      "line-width": 2,
+      "line-opacity": 0.92,
+      "line-dasharray": [3, 2],
+    },
+  });
+
+  updateLayerVisibility();
+}
+
+function setLayerVisibility(ids, visible) {
+  if (!state.mapReady) return;
+  for (const id of ids) {
+    if (state.map.getLayer(id)) {
+      state.map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+    }
+  }
+}
+
+function updateLayerVisibility() {
+  setLayerVisibility(
+    ["wtc-reference-fill", "wtc-reference-line"],
+    el("footprint-toggle").checked,
+  );
+  setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
+  setLayerVisibility(
+    ["historical-wtc-3d", "historical-wtc-labels"],
+    el("wtc3d-toggle").checked,
+  );
+}
+
+function initMap() {
+  state.map = new maplibregl.Map({
+    container: "map",
+    style: MAP_STYLE,
+    center: MAP_HOME.center,
+    zoom: MAP_HOME.zoom,
+    minZoom: 12,
+    maxZoom: 19,
+    pitch: MAP_HOME.pitch,
+    bearing: MAP_HOME.bearing,
+    maxPitch: 75,
+    canvasContextAttributes: { antialias: true },
+    attributionControl: true,
+  });
+
+  state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
+
+  state.map.on("load", () => {
+    stylizeBasemap();
+    addHistoricalLayers();
+    state.mapReady = true;
+    updateLayerVisibility();
+    renderHeading();
+  });
+
+  state.map.on("error", (event) => {
+    if (event?.error) console.error("MapLibre:", event.error);
+  });
 }
 
 function configureTimeline() {
@@ -355,7 +625,10 @@ function applyFilters() {
 }
 
 function renderMarkers() {
-  for (const marker of state.markers.values()) marker.remove();
+  for (const entry of state.markers.values()) {
+    entry.popup?.remove();
+    entry.marker.remove();
+  }
   state.markers.clear();
 
   for (const item of state.visible) {
@@ -364,58 +637,93 @@ function renderMarkers() {
     const status = claimStatus(item);
     const selected = item.id === state.selectedId;
     const symbol = mediaSymbol(item.media_type);
-    const marker = L.marker(
-      [item.location.latitude, item.location.longitude],
-      {
-        icon: L.divIcon({
-          className: "",
-          html: `<span class="evidence-map-marker ${escapeHtml(status)} ${selected ? "selected" : ""}" style="--marker-status:${markerColor(status)}"><span>${escapeHtml(symbol)}</span></span>`,
-          iconSize: selected ? [30, 30] : [24, 24],
-          iconAnchor: selected ? [15, 15] : [12, 12],
-        }),
-        riseOnHover: true,
-      },
-    ).addTo(state.map);
+    const node = document.createElement("button");
+    node.type = "button";
+    node.className = "evidence-map-marker " + status + (selected ? " selected" : "");
+    node.style.setProperty("--marker-status", markerColor(status));
+    node.innerHTML = "<span>" + escapeHtml(symbol) + "</span>";
+    node.setAttribute("aria-label", item.title || "Evidence record");
+    node.title = item.title || "Evidence record";
+
+    const marker = new maplibregl.Marker({
+      element: node,
+      anchor: "center",
+    })
+      .setLngLat([item.location.longitude, item.location.latitude])
+      .addTo(state.map);
 
     const tooltipThumb = item.media && !item.media.sensitive
       ? safeSourceUrl(item.media.thumbnail_url || (item.media.kind === "image" ? item.media.url : null))
       : "#";
-    marker.bindTooltip(
-      `<div class="map-popup">${tooltipThumb !== "#" ? `<img class="map-popup-thumb" src="${escapeHtml(tooltipThumb)}" alt="">` : ""}<strong>${escapeHtml(item.title || "Untitled record")}</strong><span>${escapeHtml(mediaSymbol(item.media_type))} ${escapeHtml(item.media_type || "record")} · ${escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time))}</span></div>`,
-      { direction: "top", offset: [0, -5], opacity: .96 }
+    const popup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 18,
+      className: "archive-map-popup",
+    }).setHTML(
+      '<div class="map-popup">' +
+      (tooltipThumb !== "#" ? '<img class="map-popup-thumb" src="' + escapeHtml(tooltipThumb) + '" alt="">' : "") +
+      "<strong>" + escapeHtml(item.title || "Untitled record") + "</strong><span>" +
+      escapeHtml(symbol) + " " +
+      escapeHtml(item.media_type || "record") + " · " +
+      escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time)) +
+      "</span></div>"
     );
 
-    marker.on("click", () => selectItem(item.id, false));
-    state.markers.set(item.id, marker);
+    node.addEventListener("mouseenter", () => {
+      popup
+        .setLngLat([item.location.longitude, item.location.latitude])
+        .addTo(state.map);
+    });
+    node.addEventListener("mouseleave", () => popup.remove());
+    node.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectItem(item.id, false);
+    });
+
+    state.markers.set(item.id, { marker, popup, element: node });
   }
 
   renderHeading();
 }
 
 function renderHeading() {
-  if (state.headingLayer) {
-    state.headingLayer.remove();
-    state.headingLayer = null;
+  if (!state.mapReady || !state.map.getSource("selected-heading")) return;
+
+  const source = state.map.getSource("selected-heading");
+  const empty = { type: "FeatureCollection", features: [] };
+
+  if (!el("heading-toggle").checked || !state.selectedId) {
+    source.setData(empty);
+    setLayerVisibility(["selected-heading-line"], false);
+    return;
   }
-  if (!el("heading-toggle").checked || !state.selectedId) return;
 
   const item = state.items.find((candidate) => candidate.id === state.selectedId);
-  if (!item?.location || item.location.heading_deg == null) return;
+  if (!item?.location || item.location.heading_deg == null) {
+    source.setData(empty);
+    setLayerVisibility(["selected-heading-line"], false);
+    return;
+  }
 
-  const origin = L.latLng(item.location.latitude, item.location.longitude);
+  const lat0 = Number(item.location.latitude);
+  const lon0 = Number(item.location.longitude);
   const distanceM = 115;
   const bearing = Number(item.location.heading_deg) * Math.PI / 180;
   const northM = Math.cos(bearing) * distanceM;
   const eastM = Math.sin(bearing) * distanceM;
-  const lat = origin.lat + northM / 111320;
-  const lon = origin.lng + eastM / (111320 * Math.cos(origin.lat * Math.PI / 180));
+  const lat1 = lat0 + northM / 111320;
+  const lon1 = lon0 + eastM / (111320 * Math.cos(lat0 * Math.PI / 180));
 
-  state.headingLayer = L.polyline([origin, [lat, lon]], {
-    color: "#e5d5b3",
-    weight: 2,
-    opacity: .9,
-    dashArray: "5 4",
-  }).addTo(state.map);
+  source.setData({
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "LineString",
+      coordinates: [[lon0, lat0], [lon1, lat1]],
+    },
+  });
+  setLayerVisibility(["selected-heading-line"], true);
 }
 
 function renderEvidenceStrip() {
@@ -605,8 +913,13 @@ function selectItem(id, focusMap) {
   }
 
   if (focusMap && item.location) {
-    state.map.flyTo([item.location.latitude, item.location.longitude], Math.max(state.map.getZoom(), 16), {
-      duration: .45,
+    state.map.flyTo({
+      center: [item.location.longitude, item.location.latitude],
+      zoom: Math.max(state.map.getZoom(), 16),
+      pitch: 62,
+      bearing: MAP_HOME.bearing,
+      duration: 550,
+      essential: true,
     });
   }
   renderMarkers();
@@ -632,10 +945,9 @@ function wireControls() {
   });
   untimedEl.addEventListener("change", applyFilters);
   searchEl.addEventListener("input", applyFilters);
-  el("footprint-toggle").addEventListener("change", () => {
-    if (el("footprint-toggle").checked) state.footprintLayer.addTo(state.map);
-    else state.footprintLayer.remove();
-  });
+  el("footprint-toggle").addEventListener("change", updateLayerVisibility);
+  el("buildings-toggle").addEventListener("change", updateLayerVisibility);
+  el("wtc3d-toggle").addEventListener("change", updateLayerVisibility);
   el("heading-toggle").addEventListener("change", renderHeading);
 
   el("reset-time").addEventListener("click", () => {
@@ -652,7 +964,14 @@ function wireControls() {
     searchEl.value = "";
     state.selectedId = null;
     detailEl.classList.remove("open");
-    state.map.setView([40.7119, -74.0127], 15);
+    state.map.flyTo({
+      center: MAP_HOME.center,
+      zoom: MAP_HOME.zoom,
+      pitch: MAP_HOME.pitch,
+      bearing: MAP_HOME.bearing,
+      duration: 650,
+      essential: true,
+    });
     applyFilters();
   });
 
