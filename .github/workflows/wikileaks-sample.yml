@@ -59,20 +59,30 @@ jobs:
                   raise SystemExit(f"Only public HTTPS dataset URLs are accepted: {url}")
           PY
 
-      - name: Download supplied public datasets
+      - name: Download supplied datasets or fetch default real public samples
         env:
           PLUSD_URL: ${{ inputs.plusd_url }}
           WAR_URL: ${{ inputs.war_diaries_url }}
+          LIMIT: ${{ inputs.sample_limit }}
         run: |
           mkdir -p artifacts/input artifacts/raw artifacts/reports
-          if [ -n "$PLUSD_URL" ]; then
-            curl --fail --location --retry 3 --retry-delay 2 "$PLUSD_URL" -o artifacts/input/plusd.csv
-          fi
-          if [ -n "$WAR_URL" ]; then
-            curl --fail --location --retry 3 --retry-delay 2 "$WAR_URL" -o artifacts/input/war-diaries.csv
+          if [ -n "$PLUSD_URL" ] || [ -n "$WAR_URL" ]; then
+            if [ -n "$PLUSD_URL" ]; then
+              curl --fail --location --retry 3 --retry-delay 2 "$PLUSD_URL" -o artifacts/input/plusd.csv
+            fi
+            if [ -n "$WAR_URL" ]; then
+              curl --fail --location --retry 3 --retry-delay 2 "$WAR_URL" -o artifacts/input/war-diaries.csv
+            fi
+            echo "WIKILEAKS_DEFAULT_REAL_SOURCES=0" >> "$GITHUB_ENV"
+          else
+            archive-ingest fetch-wikileaks-real-samples \
+              --output-dir artifacts/input \
+              --limit "$LIMIT" \
+              --manifest artifacts/reports/bulk-source-manifest.json
+            echo "WIKILEAKS_DEFAULT_REAL_SOURCES=1" >> "$GITHUB_ENV"
           fi
 
-      - name: Normalize samples or use checked-in real regression sample
+      - name: Normalize real samples
         env:
           LIMIT: ${{ inputs.sample_limit }}
         run: |
@@ -83,7 +93,8 @@ jobs:
             archive-ingest import-wikileaks-war-diaries artifacts/input/war-diaries.csv --limit "$LIMIT" --output artifacts/raw/war-diaries.jsonl
           fi
           if ! compgen -G "artifacts/raw/*.jsonl" > /dev/null; then
-            cp src/evidence_collections/wikileaks/fixtures/real_sample.jsonl artifacts/raw/real-sample.jsonl
+            echo "No real WikiLeaks samples were normalized" >&2
+            exit 1
           fi
 
       - name: Exercise shared evidence pipeline
@@ -152,12 +163,14 @@ jobs:
           required = int(os.environ["LIMIT"])
           failures = []
 
-          if os.environ.get("PLUSD_URL"):
+          using_defaults = os.environ.get("WIKILEAKS_DEFAULT_REAL_SOURCES") == "1"
+
+          if os.environ.get("PLUSD_URL") or using_defaults:
               actual = int(counts.get("wikileaks-plusd", 0))
               if actual < required:
                   failures.append(f"Cablegate requested {required}, imported {actual}")
 
-          if os.environ.get("WAR_URL"):
+          if os.environ.get("WAR_URL") or using_defaults:
               actual = int(counts.get("wikileaks-war-diaries", 0))
               if actual < required:
                   failures.append(f"War Diaries requested {required}, imported {actual}")
