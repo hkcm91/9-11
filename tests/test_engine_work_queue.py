@@ -107,6 +107,9 @@ def test_queue_construction_needs_no_core_changes(collection_id: str) -> None:
     """Same engine call, two unrelated corpora."""
 
     collection = get_collection(collection_id)
-    item = _item(source_id=next(iter(collection.source_ids())), media_type_raw="photo")
+    # The engine contract does not require a record to use a registered source.
+    # A synthetic source keeps this collection-agnostic test independent of set/hash order
+    # and of collection-specific deterministic-source rules.
+    item = _item(source_id=f"{collection_id}-synthetic-source", media_type_raw="photo")
     tasks = tasks_for_item(item, collection)
     assert tasks and all(task.collection_id == collection_id for task in tasks)
