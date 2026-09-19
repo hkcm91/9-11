@@ -283,14 +283,17 @@ function renderMarkers() {
 
     const status = claimStatus(item);
     const selected = item.id === state.selectedId;
-    const marker = L.circleMarker(
+    const symbol = mediaSymbol(item.media_type);
+    const marker = L.marker(
       [item.location.latitude, item.location.longitude],
       {
-        radius: selected ? 8 : 5.5,
-        weight: selected ? 3 : 1.5,
-        color: markerColor(status),
-        fillColor: "#141719",
-        fillOpacity: .88,
+        icon: L.divIcon({
+          className: "",
+          html: `<span class="evidence-map-marker ${escapeHtml(status)} ${selected ? "selected" : ""}" style="--marker-status:${markerColor(status)}"><span>${escapeHtml(symbol)}</span></span>`,
+          iconSize: selected ? [30, 30] : [24, 24],
+          iconAnchor: selected ? [15, 15] : [12, 12],
+        }),
+        riseOnHover: true,
       },
     ).addTo(state.map);
 
