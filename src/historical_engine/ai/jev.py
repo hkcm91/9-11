@@ -12,9 +12,15 @@ contract for Jev is known to this repository. What exists is:
 * the guarantee that whatever comes back enters the proposal/review pipeline
   and cannot become a verified record.
 
-To wire a real Jev deployment, implement ``JevTransport.ask`` and pass it in.
-Without a transport the provider is *unconfigured*: it raises on use and
-``available`` is False, so tests and CI never need credentials.
+Credential and endpoint discovery lives in ``historical_engine.ai.typesafe_config``.
+Local development may use an ignored ``.env`` file with
+``TYPESAFE_API_KEY`` and ``TYPESAFE_API_URL``; CI may provide the same values
+through environment variables. Configuration status is secret-safe.
+
+To wire a real Jev deployment, implement ``JevTransport.ask`` against the
+endpoint/request contract supplied by TypeSafe and pass it in. Without a
+transport the provider is *unconfigured*: it raises on use and ``available``
+is False, so tests and CI never need credentials.
 """
 
 from __future__ import annotations
