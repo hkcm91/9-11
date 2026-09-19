@@ -121,7 +121,7 @@ export function aircraftMapData(time) {
   const features=[];
   for(const tower of TOWERS) {
     const flight=sampleAircraft(tower,time);
-    if(flight.age < -12 || flight.age >= 6) continue;
+    // Guides are reference geometry; only aircraft positions depend on the active window.
     const name=tower.id==='north'?'Flight 11':'Flight 175';
     features.push({type:'Feature',properties:{kind:'route',tower:tower.id,label:name+' · estimated ground track'},
       geometry:{type:'LineString',coordinates:approachTrack(tower).map(p=>aircraftCoordinate(tower,p))}});

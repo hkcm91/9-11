@@ -386,6 +386,17 @@ function addHistoricalLayers() {
   state.map.addSource("aircraft-tracks", {type:"geojson",data:{type:"FeatureCollection",features:[]}});
   state.map.addLayer({id:"aircraft-routes",type:"line",source:"aircraft-tracks",filter:["==",["get","kind"],"route"],
     paint:{"line-color":"#c1af83","line-width":2,"line-opacity":.65,"line-dasharray":[3,3]}});
+  state.map.addLayer({id:"aircraft-route-labels",type:"symbol",source:"aircraft-tracks",filter:["==",["get","kind"],"route"],
+    layout:{"symbol-placement":"line","text-field":["get","label"],"text-font":["Noto Sans Regular"],"text-size":11,"text-max-angle":30},
+    paint:{"text-color":"#d6c69f","text-halo-color":"#132029","text-halo-width":2}});
+  for(const id of ["aircraft-routes","aircraft-route-labels"]) {
+    state.map.on("click",id,event=>{
+      const tower=TOWERS.find(t=>t.id===event.features?.[0]?.properties.tower);
+      if(tower) inspectApproach(tower);
+    });
+    state.map.on("mouseenter",id,()=>{state.map.getCanvas().style.cursor="pointer";});
+    state.map.on("mouseleave",id,()=>{state.map.getCanvas().style.cursor="";});
+  }
   state.map.addLayer({id:"aircraft-positions",type:"circle",source:"aircraft-tracks",filter:["==",["get","kind"],"aircraft"],
     paint:{"circle-radius":4,"circle-color":"#d8d4c6","circle-stroke-color":"#172630","circle-stroke-width":2}});
   state.map.addLayer({id:"aircraft-labels",type:"symbol",source:"aircraft-tracks",filter:["==",["get","kind"],"aircraft"],
@@ -427,7 +438,7 @@ function updateLayerVisibility() {
     ["wtc-reference-fill", "wtc-reference-line"],
     el("footprint-toggle").checked,
   );
-  setLayerVisibility(["aircraft-routes","aircraft-positions","aircraft-labels"],el("aircraft-toggle").checked && el("wtc3d-toggle").checked);
+  setLayerVisibility(["aircraft-routes","aircraft-route-labels","aircraft-positions","aircraft-labels"],el("aircraft-toggle").checked && el("wtc3d-toggle").checked);
   setLayerVisibility(["historical-wtc-labels"], el("wtc3d-toggle").checked);
   setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
   setLayerVisibility(
@@ -984,6 +995,17 @@ function playTimeline() {
   state.playbackFrame = requestAnimationFrame(tick);
 }
 
+function inspectApproach(tower) {
+  pausePlayback();
+  setTimelineToIso(new Date(Date.parse(tower.impact) - 8000).toISOString());
+  el("play-speed").value = "1";
+  el("aircraft-toggle").checked=true;el("wtc3d-toggle").checked=true;
+  updateLayerVisibility();updateHistoricalScene();
+  const bounds=new maplibregl.LngLatBounds();
+  approachTrack(tower).forEach(p=>bounds.extend(aircraftCoordinate(tower,p)));
+  state.map.fitBounds(bounds,{padding:80,maxZoom:14.4,pitch:40,bearing:0,duration:0});
+}
+
 function wireControls() {
   el("scene-motion").checked = !matchMedia("(prefers-reduced-motion: reduce)").matches;
   el("play-timeline").addEventListener("click", playTimeline);
@@ -998,14 +1020,7 @@ function wireControls() {
   }
   for (const tower of TOWERS) {
     el(`${tower.id}-impact`).addEventListener("click", () => {
-      pausePlayback();
-      setTimelineToIso(new Date(Date.parse(tower.impact) - 8000).toISOString());
-      el("play-speed").value = "1";
-      el("aircraft-toggle").checked=true;el("wtc3d-toggle").checked=true;
-      updateLayerVisibility();updateHistoricalScene();
-      const bounds=new maplibregl.LngLatBounds();
-      approachTrack(tower).forEach(p=>bounds.extend(aircraftCoordinate(tower,p)));
-      state.map.fitBounds(bounds,{padding:80,maxZoom:14.4,pitch:40,bearing:0,duration:0});
+      inspectApproach(tower);
     });
   }
   el("south-sequence").addEventListener("click", () => {

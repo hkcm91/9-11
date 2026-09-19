@@ -212,8 +212,9 @@ Aircraft & estimated approaches is a separate display toggle. Inspection buttons
 frame the full final approach, so the aircraft can be found before the final second.
 Dashed 3D guides follow the same local samples as the aircraft; dashed map lines
 and explicitly labeled dots show their ground projections, including when the
-3D renderer is unavailable. Guides cover the final 12 seconds and clear six seconds
-after impact. Aircraft disappear at contact. Motion-off keeps their selected
+3D renderer is unavailable. Ground guides cover the final 12 seconds and remain visible as reference geometry
+throughout the timeline. Clicking either labeled route opens its approach sequence.
+The elevated 3D guides clear six seconds after impact. Aircraft disappear at contact. Motion-off keeps their selected
 historical position; it does not hide aircraft. No evidence timestamps are changed.
 
 These guides remain extrapolations from NIST's final speed and attitude estimates,
