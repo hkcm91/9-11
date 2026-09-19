@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
 import { TOWERS, TOWER_BEARING } from './scene.mjs';
-import { sampleReplay, seeded, smokeParticle, upperSectionPose } from './replay.mjs';
+import { sampleReplay, seeded, smokeParticle, upperSectionPose, sampleAircraft } from './replay.mjs';
 
 // Meter-based procedural models. All geometry is authored locally, Z is up.
 export function createTowerLayer(maplibregl) {
@@ -104,6 +104,20 @@ export function createTowerLayer(maplibregl) {
       mesh(roof,materials.frame,0,0,417-roofBase+55,2.4,2.4,110);
       mesh(roof,materials.roof,0,0,417-roofBase+7,7,7,14);
     }
+    // Neutral, approximately 767-sized silhouette; nose at local origin, +Y forward.
+    const aircraft = new THREE.Group(); group.add(aircraft);
+    const airframe = new THREE.MeshLambertMaterial({color:0xc5c9c8});
+    const fuselage = new THREE.Mesh(new THREE.SphereGeometry(1,16,12),airframe);
+    fuselage.scale.set(2.5,24.25,2.7);fuselage.position.y=-24.25;aircraft.add(fuselage);
+    const surface = (points, z=0) => {
+      const shape=new THREE.Shape();points.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));shape.closePath();
+      const node=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:.65,bevelEnabled:false}),airframe);
+      node.position.z=z;aircraft.add(node);return node;
+    };
+    surface([[-3,-19],[-23.8,-31],[-23.8,-34],[-3,-29],[3,-29],[23.8,-34],[23.8,-31],[3,-19]]);
+    surface([[-2,-39],[-9,-46],[-9,-48],[0,-45],[9,-48],[9,-46],[2,-39]],1);
+    mesh(aircraft,airframe,0,-43,4,1,8,7);
+    for(const x of [-8,8]) mesh(aircraft,materials.roof,x,-25,-2,3.5,7,3.5);
     const damage = new THREE.Group(); group.add(damage);
     for(let i=0;i<9;i++) {
       const x=(i-4)*5.4+(tower.id==='south'?7:0), h=(tower.impactTop-tower.impactBase)*(1-.11*Math.abs(i-4));
@@ -121,7 +135,8 @@ export function createTowerLayer(maplibregl) {
       const material=new THREE.MeshBasicMaterial({color,map:cloudTexture,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide});
       const node=new THREE.Mesh(cloudGeometry,material); node.frustumCulled=false; group.add(node); return node;
     });
-    return {tower,group,lower,upper,split,sections,damage,debris,fragments,
+    return {tower,group,lower,upper,split,sections,damage,debris,fragments,aircraft,
+      impact:clouds(3,0x98704a),
       smoke:clouds(28,0x64635e),dust:clouds(24,0xb1a798)};
   });
   // Low, neutral plaza surface only; surrounding building geometry stays on the map.
@@ -140,6 +155,16 @@ export function createTowerLayer(maplibregl) {
       root.visible=visible;
       const states=sampleReplay(lastTime,motion);
       for(const model of models) {
+        const flight=sampleAircraft(model.tower,lastTime,motion);
+        model.aircraft.visible=flight.visible;
+        model.aircraft.position.set(flight.x,flight.y,flight.z);
+        model.aircraft.rotation.set(-flight.descent,-flight.bank,-flight.heading,'ZXY');
+        model.impact.forEach((node,i)=>{
+          node.visible=flight.impact>0;
+          node.position.set((model.tower.id==='south'?7:0)+(i-1)*12,model.tower.face*37,
+            (model.tower.impactBase+model.tower.impactTop)/2+i*6);
+          node.scale.setScalar(flight.radius);node.material.opacity=flight.impact*.55;
+        });
         const s=states[model.tower.id], collapsing=s.status==='collapsing', standing=s.status==='intact'||s.status==='impacted';
         model.lower.visible=standing||collapsing; model.upper.visible=standing||(collapsing&&s.pose.cohesion>.05);
         model.upper.position.set(collapsing?s.pose.drop*.08:0,collapsing?-s.pose.drop*.04:0,model.split-(collapsing?s.pose.drop:0));
@@ -185,7 +210,7 @@ export function createTowerLayer(maplibregl) {
       faceCamera.setFromAxisAngle(axisZ,(-map.getBearing()-TOWER_BEARING)*Math.PI/180);
       pitchRotation.setFromAxisAngle(axisX,map.getPitch()*Math.PI/180);
       faceCamera.multiply(pitchRotation);
-      for(const model of models) for(const node of [...model.smoke,...model.dust]) node.quaternion.copy(faceCamera);
+      for(const model of models) for(const node of [...model.smoke,...model.dust,...model.impact]) node.quaternion.copy(faceCamera);
       camera.projectionMatrix.fromArray(args.defaultProjectionData.mainMatrix).multiply(transform);
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
       renderer.resetState(); renderer.render(scene,camera); renderer.resetState();

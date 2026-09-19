@@ -275,7 +275,7 @@ function addHistoricalLayers() {
     filter: [
       "all",
       ["!=", ["get", "hide_3d"], true],
-      ["!", ["within", WTC_SITE]],
+      [">", ["distance", WTC_SITE], 1],
     ],
     paint: {
       "fill-extrusion-color": "#89939a",
@@ -299,9 +299,7 @@ function addHistoricalLayers() {
   try {
     state.map.addLayer(massingLayer, labelLayerId);
   } catch (error) {
-    console.warn("WTC exclusion expression unavailable; rendering city massing without exclusion.", error);
-    massingLayer.filter = ["!=", ["get", "hide_3d"], true];
-    state.map.addLayer(massingLayer, labelLayerId);
+    console.warn("City massing unavailable; preserving an unobstructed historical site.", error);
   }
 
   state.map.addSource("wtc-site", { type: "geojson", data: WTC_SITE });
@@ -418,10 +416,11 @@ function updateLayerVisibility() {
     ["wtc-reference-fill", "wtc-reference-line"],
     el("footprint-toggle").checked,
   );
+  setLayerVisibility(["historical-wtc-labels"], el("wtc3d-toggle").checked);
   setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
   setLayerVisibility(
-    SCENE_LAYERS.filter(id => !state.detailedScene || id === "historical-wtc-labels"),
-    el("wtc3d-toggle").checked,
+    SCENE_LAYERS.filter(id => id !== "historical-wtc-labels"),
+    el("wtc3d-toggle").checked && !state.detailedScene,
   );
 }
 
@@ -431,6 +430,7 @@ async function loadDetailedScene() {
     const layer = createTowerLayer(maplibregl);
     state.map.addLayer(layer, "historical-wtc-labels");
     state.detailedScene = layer;
+    for (const tower of TOWERS) el(`${tower.id}-impact`).disabled = false;
     setLayerVisibility(SCENE_LAYERS.filter(id => id !== "historical-wtc-labels"), false);
     el("reconstruction-status").textContent = "Detailed reconstruction · illustrative motion";
     state.sceneKey = null;
@@ -981,6 +981,15 @@ function wireControls() {
       pausePlayback();
       timelineEl.value = String(Math.max(0, Math.min(Number(timelineEl.max), Number(timelineEl.value) + delta)));
       applyFilters();
+    });
+  }
+  for (const tower of TOWERS) {
+    el(`${tower.id}-impact`).addEventListener("click", () => {
+      pausePlayback();
+      setTimelineToIso(new Date(Date.parse(tower.impact) - 8000).toISOString());
+      el("play-speed").value = "1";
+      state.map.flyTo({ center: [tower.lng,tower.lat + .0013], zoom: sceneZoom(), pitch: 58,
+        bearing: tower.id === "north" ? 155 : -25, duration: 0 });
     });
   }
   el("south-sequence").addEventListener("click", () => {
