@@ -361,3 +361,48 @@ archive-ingest --collection wikileaks run-jev-decisions \
 
 The GitHub `wikileaks-sample` workflow also has a `run_jev` checkbox. It is
 off by default so normal archive validation does not spend TypeSafe API credits.
+
+
+## 25-candidate live Jev calibration
+
+Before scaling Jev to the full candidate queue, the WikiLeaks sample workflow
+now supports a capped live calibration run.
+
+Use workflow inputs:
+
+- `run_jev = true`
+- `jev_candidate_limit = 25` (default)
+- supply real PlusD / War Diaries dataset URLs when testing real records
+
+The live runner enforces the cap before making API calls:
+
+```bash
+archive-ingest --collection wikileaks run-jev-decisions \
+  artifacts/reports/resolution-candidates.jsonl \
+  --output artifacts/reports/resolution-decisions.jsonl \
+  --proposal-output artifacts/reports/resolution-proposals.jsonl \
+  --limit 25
+```
+
+After the live calls it automatically builds:
+
+- `artifacts/reports/jev-calibration.json`
+- `artifacts/reports/jev-calibration.md`
+
+The calibration report summarizes:
+
+- number of real Jev decisions
+- same-entity vs same-event question counts
+- answer distribution
+- mean/min/max confidence
+- confidence bands
+- routing outcomes
+- proposal vs no-proposal counts
+- medium-confidence / human-review cases prioritized for manual inspection
+
+The decision JSONL also preserves Jev's returned probability distribution and
+usage metadata where available.
+
+This stage is deliberately small. Its purpose is to evaluate whether Jev's
+confidence is useful on the archive's actual candidate distribution before
+raising the API-call limit.
