@@ -1,0 +1,3 @@
+# Keep Windows launchers CRLF so cmd.exe can parse labels and blocks.
+*.bat text eol=crlf
+*.cmd text eol=crlf
