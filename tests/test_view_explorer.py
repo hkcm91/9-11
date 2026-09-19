@@ -128,9 +128,31 @@ def test_batch_file_uses_windows_null_device_not_unix() -> None:
 
 def test_batch_file_delegates_to_the_tested_helper() -> None:
     text = BAT.read_text(encoding="ascii")
+    # Beside the batch file (dropped next to an unzipped artifact)...
+    assert '"view_explorer.py"' in text
+    # ...or in the repository layout.
     assert r"tools\view_explorer.py" in text
-    # And still works inside an artifact, where tools/ does not exist.
+    # And still works with no helper at all, where only the artifact exists.
     assert "--directory explorer" in text
+
+
+def test_batch_file_warns_when_the_read_model_is_absent() -> None:
+    """A silently empty page is the worst outcome for a non-technical user."""
+
+    text = BAT.read_text(encoding="ascii")
+    assert text.count("is missing; the page will be empty") >= 2
+
+
+def test_helper_finds_an_artifact_from_the_folder_it_was_dropped_into(tmp_path: Path) -> None:
+    """The flow we actually tell people to use: unzip, drop both files, run."""
+
+    _explorer(tmp_path / "explorer", items=158)
+    (tmp_path / "VIEW_EXPLORER.bat").write_bytes(BAT.read_bytes())
+    (tmp_path / "view_explorer.py").write_text("# copy of the helper", encoding="utf-8")
+
+    found = find_explorer_dir(tmp_path)
+    assert found == (tmp_path / "explorer").resolve()
+    assert "158 records" in describe_data(found)
 
 
 def test_candidate_dirs_cover_the_documented_layouts() -> None:
