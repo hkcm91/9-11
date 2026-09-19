@@ -125,3 +125,23 @@ def test_enrich_search_item_merges_full_metadata(monkeypatch) -> None:
 
     assert enriched["title"] == "Detailed title"
     assert enriched["_file_summary"]["original_file_count"] == 1
+
+
+def test_sample_keeps_base_record_when_enrichment_temporarily_fails(monkeypatch) -> None:
+    adapter = InternetArchiveAdapter(request_delay_s=0)
+
+    monkeypatch.setattr(
+        adapter,
+        "iter_items",
+        lambda *, max_items: iter([{"identifier": "sample-item", "title": "Search title"}]),
+    )
+
+    def fail_enrichment(item):
+        raise InternetArchiveAdapterError("temporary upstream failure")
+
+    monkeypatch.setattr(adapter, "enrich_search_item", fail_enrichment)
+    records = adapter.sample(limit=1, enrich=True)
+
+    assert len(records) == 1
+    assert records[0].source_item_id == "sample-item"
+    assert records[0].title_raw == "Search title"
