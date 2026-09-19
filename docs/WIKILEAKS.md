@@ -419,12 +419,14 @@ bounded real samples automatically:
 - **Cablegate / PlusD** — discovers the CSV file at runtime from the Internet
   Archive item `wikileaks-cables-csv`. The original WikiLeaks release remains
   the canonical source; Internet Archive is used only as a transport mirror.
-- **Iraq War Logs** — streams `iraq1.csv` from the public
-  `FreGeh/iraq-war-logs` GitHub mirror for validation.
+- **Afghan War Diary** — discovers the full-schema CSV at runtime from the
+  Internet Archive item `WikileaksWarDiaryCsv`. The dump is headerless, so the
+  documented 32-field SIGACT schema is applied explicitly before normalization.
 
-The fetcher parses the remote CSV stream and stops after the requested number of
-records, so the workflow does not download the full multi-gigabyte Cablegate
-CSV merely to create a 100-record sample.
+Both historical CSV dumps are headerless. The fetcher applies explicit schemas
+before writing the bounded local samples, parses the remote stream, and stops
+after the requested number of records. The workflow therefore does not download
+the full multi-gigabyte Cablegate archive merely to create a 100-record sample.
 
 Run locally:
 
