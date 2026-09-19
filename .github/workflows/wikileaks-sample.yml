@@ -20,6 +20,10 @@ on:
         required: false
         type: boolean
         default: false
+      jev_candidate_limit:
+        description: Maximum Jev decisions for calibration
+        required: false
+        default: "25"
 
 jobs:
   sample:
@@ -112,14 +116,25 @@ jobs:
             --max-entity-pairs 500 \
             --max-event-pairs 500
 
-      - name: Run resolution candidates through Jev
+      - name: Run capped resolution candidates through Jev
         if: ${{ inputs.run_jev }}
+        env:
+          JEV_LIMIT: ${{ inputs.jev_candidate_limit }}
         run: |
           archive-ingest --collection wikileaks run-jev-decisions \
             artifacts/reports/resolution-candidates.jsonl \
             --output artifacts/reports/resolution-decisions.jsonl \
             --proposal-output artifacts/reports/resolution-proposals.jsonl \
-            --agent-version jev-http-v1
+            --agent-version jev-http-v1 \
+            --limit "$JEV_LIMIT"
+
+      - name: Build Jev calibration report
+        if: ${{ inputs.run_jev }}
+        run: |
+          archive-ingest --collection wikileaks analyze-jev-calibration \
+            artifacts/reports/resolution-decisions.jsonl \
+            --json-output artifacts/reports/jev-calibration.json \
+            --markdown-output artifacts/reports/jev-calibration.md
 
       - name: Validate requested real-batch coverage
         env:
