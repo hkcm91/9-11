@@ -5,6 +5,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -22,12 +23,19 @@ class InternetArchiveAdapterError(RuntimeError):
 class InternetArchiveAdapter:
     def __init__(self, *, collection: str = "911", base_url: str = DEFAULT_BASE_URL,
                  user_agent: str = DEFAULT_USER_AGENT, request_delay_s: float = 0.5,
-                 timeout_s: float = 30.0) -> None:
+                 timeout_s: float = 30.0, max_retries: int = 3,
+                 retry_backoff_s: float = 1.0) -> None:
         self.collection = collection
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
         self.request_delay_s = request_delay_s
         self.timeout_s = timeout_s
+        if max_retries < 0:
+            raise ValueError("max_retries must be >= 0")
+        if retry_backoff_s < 0:
+            raise ValueError("retry_backoff_s must be >= 0")
+        self.max_retries = max_retries
+        self.retry_backoff_s = retry_backoff_s
         self._last_request_at: float | None = None
 
     def _throttle(self) -> None:
@@ -37,24 +45,41 @@ class InternetArchiveAdapter:
         if remaining > 0:
             time.sleep(remaining)
 
+    @staticmethod
+    def _retryable_error(exc: Exception) -> bool:
+        if isinstance(exc, HTTPError):
+            return exc.code in {429, 500, 502, 503, 504}
+        return isinstance(exc, (URLError, TimeoutError, ConnectionError))
+
     def _get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        self._throttle()
         query = urlencode(params or {}, doseq=True)
         url = f"{self.base_url}{path}"
         if query:
             url = f"{url}?{query}"
         req = Request(url, headers={"User-Agent": self.user_agent, "Accept": "application/json"})
-        try:
-            with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310
-                body = response.read().decode("utf-8")
-        except Exception as exc:
-            raise InternetArchiveAdapterError(f"failed to fetch {url}: {exc}") from exc
-        finally:
-            self._last_request_at = time.monotonic()
-        try:
-            return json.loads(body)
-        except json.JSONDecodeError as exc:
-            raise InternetArchiveAdapterError(f"invalid JSON returned for {url}") from exc
+
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            self._throttle()
+            try:
+                with urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310
+                    body = response.read().decode("utf-8")
+                try:
+                    return json.loads(body)
+                except json.JSONDecodeError as exc:
+                    raise InternetArchiveAdapterError(f"invalid JSON returned for {url}") from exc
+            except InternetArchiveAdapterError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if attempt >= self.max_retries or not self._retryable_error(exc):
+                    break
+                if self.retry_backoff_s > 0:
+                    time.sleep(self.retry_backoff_s * (2 ** attempt))
+            finally:
+                self._last_request_at = time.monotonic()
+
+        raise InternetArchiveAdapterError(f"failed to fetch {url}: {last_error}") from last_error
 
     def search_page(self, *, page: int = 1, rows: int = 50) -> list[dict[str, Any]]:
         if page < 1:
@@ -201,7 +226,13 @@ class InternetArchiveAdapter:
         records: list[SourceItem] = []
         for item in self.iter_items(max_items=limit):
             if enrich:
-                item = self.enrich_search_item(item)
+                try:
+                    item = self.enrich_search_item(item)
+                except InternetArchiveAdapterError:
+                    # Detailed media metadata is an enhancement. A transient
+                    # archive.org metadata failure must not discard the base
+                    # search record or abort the entire corpus build.
+                    pass
             records.append(self.normalize(item))
         return records
 

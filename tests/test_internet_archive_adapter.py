@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from io import BytesIO
+from urllib.error import HTTPError
+
 from archive.adapters.internet_archive import (
     SOURCE_ID,
     InternetArchiveAdapter,
@@ -125,3 +128,61 @@ def test_enrich_search_item_merges_full_metadata(monkeypatch) -> None:
 
     assert enriched["title"] == "Detailed title"
     assert enriched["_file_summary"]["original_file_count"] == 1
+
+
+def test_sample_keeps_base_record_when_enrichment_temporarily_fails(monkeypatch) -> None:
+    adapter = InternetArchiveAdapter(request_delay_s=0)
+
+    monkeypatch.setattr(
+        adapter,
+        "iter_items",
+        lambda *, max_items: iter([{"identifier": "sample-item", "title": "Search title"}]),
+    )
+
+    def fail_enrichment(item):
+        raise InternetArchiveAdapterError("temporary upstream failure")
+
+    monkeypatch.setattr(adapter, "enrich_search_item", fail_enrichment)
+    records = adapter.sample(limit=1, enrich=True)
+
+    assert len(records) == 1
+    assert records[0].source_item_id == "sample-item"
+    assert records[0].title_raw == "Search title"
+
+
+def test_get_json_retries_transient_http_errors(monkeypatch) -> None:
+    adapter = InternetArchiveAdapter(
+        request_delay_s=0,
+        max_retries=2,
+        retry_backoff_s=0,
+    )
+    calls = 0
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"response": {"docs": []}}'
+
+    def flaky_urlopen(req, timeout):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise HTTPError(
+                req.full_url,
+                502,
+                "Bad Gateway",
+                hdrs=None,
+                fp=BytesIO(),
+            )
+        return Response()
+
+    monkeypatch.setattr("archive.adapters.internet_archive.urlopen", flaky_urlopen)
+    payload = adapter._get_json("/advancedsearch.php", {"q": "collection:911"})
+
+    assert payload == {"response": {"docs": []}}
+    assert calls == 3
