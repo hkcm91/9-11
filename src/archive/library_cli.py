@@ -1,4 +1,4 @@
-"""Operator CLI and loopback-only, read-only document library preview."""
+"""Operator CLI and loopback document reader with explicit Jev comparisons."""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import shutil
+from threading import Lock
 from urllib.parse import parse_qs, urlsplit
 
 from archive.document_library import DocumentLibrary, digest
@@ -15,8 +16,68 @@ class LibraryServer(ThreadingHTTPServer):
     allow_reuse_address = False
 
 
-def handler_for(database, objects):
+def handler_for(database, objects, *, jev_factory=None):
+    from historical_engine.ai.jev import JevDecisionProvider
+    from historical_engine.ai.providers import AiProviderError
+    comparison_lock = Lock()
+
+    def provider_status():
+        provider = (jev_factory or JevDecisionProvider.from_env)()
+        ready = True if jev_factory else provider.transport.config.ready_for_transport
+        return provider, {"configured": ready, "model": provider.model,
+                          "message": "Ready to request a comparison. Connection is checked when you compare."
+                          if ready else "Jev needs a server-side TypeSafe API key before comparisons can run."}
+
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != "/api/compare":
+                return self.respond(404, {"error": "Not found"})
+            # No cross-origin browser can initiate a paid call or write proposals.
+            host = self.headers.get("Host", "")
+            allowed = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
+            if (host not in allowed or self.headers.get("Origin") != "http://" + host
+                    or self.headers.get("X-Archive-Request") != "1"):
+                return self.respond(403, {"error": "Open the archive locally to compare pages."})
+            if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
+                return self.respond(415, {"error": "Expected JSON"})
+            library = None
+            acquired = False
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 4096:
+                    return self.respond(413, {"error": "Invalid request size"})
+                values = json.loads(self.rfile.read(length))
+                if not isinstance(values, dict) or values.get("question") not in {
+                        "same_event", "same_entity", "duplicate_or_derivative"}:
+                    raise ValueError("Choose a supported comparison question.")
+                for side in ("left", "right"):
+                    if not isinstance(values.get(side), str) or len(values[side]) != 64:
+                        raise ValueError("Choose two document pages.")
+                    number = values.get(side + "_page")
+                    if type(number) is not int or number < 1:
+                        raise ValueError("Choose valid page numbers.")
+                acquired = comparison_lock.acquire(blocking=False)
+                if not acquired:
+                    return self.respond(429, {"error": "A comparison is already running. Try again when it finishes."})
+                provider, status = provider_status()
+                if not status["configured"]:
+                    return self.respond(503, {"error": status["message"]})
+                library = DocumentLibrary(database, objects)
+                result = library.compare(values["left"], values["left_page"], values["right"],
+                                         values["right_page"], values["question"], provider)
+                return self.respond(200, result)
+            except AiProviderError:
+                return self.respond(502, {"error": "Jev could not complete the comparison. Check the server credentials and connection, then retry."})
+            except (ValueError, TypeError, KeyError) as exc:
+                return self.respond(400, {"error": str(exc) if isinstance(exc, ValueError) else "Invalid comparison request"})
+            except Exception:
+                return self.respond(500, {"error": "Unable to complete comparison"})
+            finally:
+                if library:
+                    library.close()
+                if acquired:
+                    comparison_lock.release()
+
         def do_GET(self):
             parsed = urlsplit(self.path)
             library = DocumentLibrary(database, objects)
@@ -25,6 +86,9 @@ def handler_for(database, objects):
                     return self.respond(200, Path(__file__).with_name("library.html").read_bytes(), "text/html; charset=utf-8")
                 if parsed.path == "/library.js":
                     return self.respond(200, Path(__file__).with_name("library.js").read_bytes(), "text/javascript; charset=utf-8")
+                if parsed.path == "/api/jev/status":
+                    _, status = provider_status()
+                    return self.respond(200, status)
                 if parsed.path == "/api/search":
                     values = parse_qs(parsed.query)
                     return self.respond(200, library.search(values.get("q", [""])[0], values.get("collection", [""])[0], offset=int(values.get("offset", ["0"])[0])))

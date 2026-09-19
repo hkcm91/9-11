@@ -136,6 +136,22 @@ documents. Original HTML is downloaded as an attachment, never embedded.
 
 ## Jev comparisons
 
+The local reader includes a **Compare pages with Jev** panel. Open a page, select
+it as the first comparison page, then select another page as the second. Choose
+same event, same entity, or duplicate/derivative and click **Compare with Jev**.
+The explicit request sends the selected passages to TypeSafe; it does not send
+the archive corpus. The result shows model confidence, review status, citations,
+and the exact passages supplied, including any truncation.
+
+Copy `.env.example` to the ignored `.env` file and set `TYPESAFE_API_KEY` locally.
+Use **Check connection settings** after saving. Local file settings are read fresh;
+process environment overrides them. Configuration status is not a live connection
+test: the first comparison validates the actual deployment. The browser never
+receives the key. Missing credentials disable comparisons; provider failures are
+reported without exposing upstream response details. The loopback POST endpoint
+requires same-origin JSON and serializes comparisons to avoid duplicate in-flight
+requests. This is not an authenticated multi-user deployment.
+
 ```sh
 archive-library compare LEFT_ID RIGHT_ID --left-page 2 --right-page 7 --question same_event
 ```

@@ -2,6 +2,73 @@ const $ = id => document.getElementById(id);
 let offset = 0;
 let searchGeneration = 0;
 let readerGeneration = 0;
+let jevReady = false;
+let jevBusy = false;
+const comparisonPages = {left: null, right: null};
+
+function updateComparison() {
+  for (const side of ['left', 'right']) {
+    const page = comparisonPages[side];
+    const label = side === 'left' ? 'First page: ' : 'Second page: ';
+    $('jev-' + side).replaceChildren(document.createTextNode(label));
+    $('jev-' + side).append(page ? link(page.title + ', page ' + page.number, pageLink(page.id, page.number))
+      : document.createTextNode('not selected'));
+  }
+  $('jev-run').disabled = jevBusy || !jevReady || !comparisonPages.left || !comparisonPages.right;
+  $('jev-clear').disabled = jevBusy;
+  $('jev-question').disabled = jevBusy;
+}
+
+async function checkJev() {
+  try {
+    const status = await api('/api/jev/status');
+    jevReady = status.configured;
+    $('jev-status').textContent = status.message;
+  } catch {
+    jevReady = false;
+    $('jev-status').textContent = 'Could not check Jev settings. Try again.';
+  }
+  updateComparison();
+}
+
+async function comparePages(event) {
+  event.preventDefault();
+  if (jevBusy || !jevReady || !comparisonPages.left || !comparisonPages.right) return;
+  jevBusy = true;
+  updateComparison();
+  $('jev-result').replaceChildren(el('p', 'Comparing selected source passages…'));
+  const selected = {left: {...comparisonPages.left}, right: {...comparisonPages.right}};
+  try {
+    const response = await fetch('/api/compare', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-Archive-Request': '1'},
+      body: JSON.stringify({left: selected.left.id, left_page: selected.left.number,
+        right: selected.right.id, right_page: selected.right.number, question: $('jev-question').value}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error || 'Comparison unavailable.');
+    const answer = result.response;
+    $('jev-result').replaceChildren(el('h3', 'Suggested result: ' + answer.answer.replaceAll('_', ' ')),
+      el('p', 'Model confidence: ' + Math.round(answer.confidence * 100) + '% · '
+        + (result.proposal_id ? 'Awaiting review' : 'No review proposal created')),
+      el('p', answer.rationale), el('p', 'Model: ' + answer.model, 'meta'));
+    for (const [index, passage] of result.passages.entries()) {
+      const page = index === 0 ? selected.left : selected.right;
+      const details = el('details');
+      details.append(el('summary', page.title + ', page ' + passage.page + ' — text supplied to Jev'),
+        link('Read source page', pageLink(passage.document_id, passage.page)));
+      const text = el('p', passage.text);
+      text.style.whiteSpace = 'pre-wrap';
+      details.append(text);
+      if (passage.truncated) details.append(el('p', 'Only the first 12,000 characters of this page were supplied.', 'warning'));
+      $('jev-result').append(details);
+    }
+  } catch (error) {
+    $('jev-result').replaceChildren(el('p', error.message, 'warning'));
+  } finally {
+    jevBusy = false;
+    updateComparison();
+  }
+}
 
 function el(tag, text, cls) {
   const element = document.createElement(tag);
@@ -135,6 +202,18 @@ async function read() {
       }
     };
     section.append(cite);
+    for (const side of ['left', 'right']) {
+      const choose = el('button', side === 'left' ? 'Use as first comparison page' : 'Use as second comparison page');
+      choose.disabled = Boolean(page.needs_ocr);
+      choose.onclick = () => {
+        if (jevBusy) return;
+        comparisonPages[side] = {id, number, title: doc.title};
+        $('jev-result').replaceChildren();
+        updateComparison();
+        $('jev').scrollIntoView({block: 'start'});
+      };
+      section.append(choose);
+    }
     if (doc.format === 'pdf') {
       const scan = el('details');
       scan.append(el('summary', 'View original page'));
@@ -181,3 +260,12 @@ window.addEventListener('hashchange', read);
 search();
 read();
 coverage();
+$('jev-form').onsubmit = comparePages;
+$('jev-clear').onclick = () => {
+  comparisonPages.left = comparisonPages.right = null;
+  $('jev-result').replaceChildren();
+  updateComparison();
+};
+$('jev-refresh').onclick = checkJev;
+$('jev-question').onchange = () => $('jev-result').replaceChildren();
+checkJev();
