@@ -1,5 +1,7 @@
 import * as maplibregl from "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.mjs";
 
+import { getSceneState, SCENE_LAYERS, updateSceneSources } from "./scene.mjs";
+
 const DATA_URL = "./data/explorer.json";
 
 const EVENT_ANCHORS = [
@@ -13,8 +15,8 @@ const EVENT_ANCHORS = [
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/fiord";
 const MAP_HOME = {
-  center: [-74.0128, 40.7119],
-  zoom: 15.35,
+  center: [-74.0130, 40.7131],
+  zoom: 15.1,
   pitch: 58,
   bearing: 27,
 };
@@ -34,73 +36,6 @@ const WTC_SITE = {
   },
 };
 
-function rotatedRectangle(lng, lat, widthM, depthM, bearingDeg, properties = {}) {
-  const theta = bearingDeg * Math.PI / 180;
-  const cosTheta = Math.cos(theta);
-  const sinTheta = Math.sin(theta);
-  const halfW = widthM / 2;
-  const halfD = depthM / 2;
-  const corners = [
-    [-halfW, -halfD],
-    [halfW, -halfD],
-    [halfW, halfD],
-    [-halfW, halfD],
-    [-halfW, -halfD],
-  ].map(([x, y]) => {
-    const east = x * cosTheta - y * sinTheta;
-    const north = x * sinTheta + y * cosTheta;
-    const dLat = north / 111320;
-    const dLng = east / (111320 * Math.cos(lat * Math.PI / 180));
-    return [lng + dLng, lat + dLat];
-  });
-
-  return {
-    type: "Feature",
-    properties,
-    geometry: { type: "Polygon", coordinates: [corners] },
-  };
-}
-
-const WTC_TOWERS = {
-  type: "FeatureCollection",
-  features: [
-    rotatedRectangle(-74.01337, 40.71273, 63.4, 63.4, -28.5, {
-      name: "North Tower",
-      kind: "tower",
-      height: 417,
-      base: 0,
-    }),
-    rotatedRectangle(-74.01339, 40.71173, 63.4, 63.4, -28.5, {
-      name: "South Tower",
-      kind: "tower",
-      height: 415,
-      base: 0,
-    }),
-    rotatedRectangle(-74.01337, 40.71273, 5.2, 5.2, -28.5, {
-      name: "North Tower antenna",
-      kind: "antenna",
-      height: 527,
-      base: 417,
-    }),
-  ],
-};
-
-const WTC_LABELS = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      properties: { label: "NORTH TOWER" },
-      geometry: { type: "Point", coordinates: [-74.01337, 40.71273] },
-    },
-    {
-      type: "Feature",
-      properties: { label: "SOUTH TOWER" },
-      geometry: { type: "Point", coordinates: [-74.01339, 40.71173] },
-    },
-  ],
-};
-
 const state = {
   payload: null,
   items: [],
@@ -109,6 +44,7 @@ const state = {
   markers: new Map(),
   map: null,
   mapReady: false,
+  sceneKey: null,
 };
 
 const el = (id) => document.getElementById(id);
@@ -380,7 +316,7 @@ function addHistoricalLayers() {
     },
   }, labelLayerId);
 
-  state.map.addSource("historical-wtc", { type: "geojson", data: WTC_TOWERS });
+  state.map.addSource("historical-wtc", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   state.map.addLayer({
     id: "historical-wtc-3d",
     type: "fill-extrusion",
@@ -390,6 +326,8 @@ function addHistoricalLayers() {
         "match",
         ["get", "kind"],
         "antenna", "#ded6c7",
+        "damage", "#443b37",
+        "debris", "#8e877b",
         "#c3c7c7",
       ],
       "fill-extrusion-height": ["get", "height"],
@@ -399,7 +337,21 @@ function addHistoricalLayers() {
     },
   }, labelLayerId);
 
-  state.map.addSource("wtc-labels", { type: "geojson", data: WTC_LABELS });
+  for (const [id, color, opacity] of [["wtc-smoke", "#8c8882", 0.42], ["wtc-dust", "#b2a797", 0.18]]) {
+    state.map.addSource(id, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    state.map.addLayer({
+      id, source: id, type: "fill-extrusion",
+      paint: {
+        "fill-extrusion-color": color,
+        "fill-extrusion-height": ["get", "height"],
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-opacity": opacity,
+        "fill-extrusion-vertical-gradient": false,
+      },
+    }, labelLayerId);
+  }
+
+  state.map.addSource("wtc-labels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   state.map.addLayer({
     id: "historical-wtc-labels",
     type: "symbol",
@@ -458,7 +410,7 @@ function updateLayerVisibility() {
   );
   setLayerVisibility(["city-massing"], el("buildings-toggle").checked);
   setLayerVisibility(
-    ["historical-wtc-3d", "historical-wtc-labels"],
+    SCENE_LAYERS,
     el("wtc3d-toggle").checked,
   );
 }
@@ -484,6 +436,7 @@ function initMap() {
     stylizeBasemap();
     addHistoricalLayers();
     state.mapReady = true;
+    updateHistoricalScene();
     updateLayerVisibility();
     renderHeading();
   });
@@ -558,8 +511,20 @@ function currentHistoricalTime() {
   return new Date(start.getTime() + Number(timelineEl.value) * 60000);
 }
 
+function updateHistoricalScene() {
+  if (!state.payload) return;
+  const scene = getSceneState(currentHistoricalTime());
+  const key = `${scene.north}/${scene.south}`;
+  const descriptions = { intact: "intact", impacted: "impact damage / smoke", collapsed: "collapsed / debris" };
+  el("scene-status").textContent = `North: ${descriptions[scene.north]} · South: ${descriptions[scene.south]}`;
+  if (!state.mapReady || key === state.sceneKey) return;
+  updateSceneSources(state.map, scene);
+  state.sceneKey = key;
+}
+
 function updateClock() {
   const label = fmtTime(currentHistoricalTime());
+  updateHistoricalScene();
   clockEl.textContent = label;
   mapClockEl.textContent = label;
 }

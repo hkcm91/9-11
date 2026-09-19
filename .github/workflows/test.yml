@@ -17,3 +17,5 @@ jobs:
       - run: pytest -q
       - name: Check Explorer JavaScript syntax
         run: node --check apps/web-explorer/app.js
+      - name: Test Explorer historical scene
+        run: node --test apps/web-explorer/scene.test.mjs

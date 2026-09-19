@@ -214,6 +214,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   left: 54px;
   min-width: 185px;
   padding: 10px 12px;
+  max-width: calc(100% - 70px);
 }
 .map-title-card strong {
   display: block;
