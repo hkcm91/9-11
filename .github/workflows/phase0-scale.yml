@@ -20,11 +20,11 @@ on:
       internet_archive_limit:
         description: Internet Archive metadata records
         required: false
-        default: "350"
+        default: "500"
       photo_map_limit:
         description: archDisk point-photo records
         required: false
-        default: "150"
+        default: "300"
       nist_organized_limit:
         description: NIST organized photo/video asset records
         required: false
@@ -53,7 +53,7 @@ jobs:
           mkdir -p artifacts/raw artifacts/reports
           archive-ingest sample-nist --delay 0.25 --output artifacts/raw/nist-repository.jsonl
           archive-ingest sample-nist-organized --limit "${{ inputs.nist_organized_limit || '250' }}" --delay 0.2 --output artifacts/raw/nist-organized-media.jsonl
-          archive-ingest sample-photo-map --limit "${{ inputs.photo_map_limit || '150' }}" --delay 0.2 --output artifacts/raw/archdisk-photo-map.jsonl
+          archive-ingest sample-photo-map --limit "${{ inputs.photo_map_limit || '300' }}" --delay 0.2 --output artifacts/raw/archdisk-photo-map.jsonl
 
       - name: Collect reconstruction-oriented September 11 Digital Archive collections
         run: |
@@ -63,7 +63,7 @@ jobs:
 
       - name: Collect Internet Archive broadcast metadata
         run: |
-          archive-ingest sample-internet-archive --limit "${{ inputs.internet_archive_limit || '350' }}" --delay 0.25 --output artifacts/raw/internet-archive.jsonl
+          archive-ingest sample-internet-archive --limit "${{ inputs.internet_archive_limit || '500' }}" --delay 0.25 --output artifacts/raw/internet-archive.jsonl
           archive-ingest sample-internet-archive --details --limit 50 --delay 0.25 --output artifacts/raw/internet-archive-details.jsonl
 
       - name: Build normalized research outputs
@@ -98,16 +98,6 @@ jobs:
           cp apps/web-explorer/index.html artifacts/explorer/
           cp apps/web-explorer/styles.css artifacts/explorer/
           cp apps/web-explorer/app.js artifacts/explorer/
-
-      - name: Configure GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v6
-
-      - name: Upload Explorer for GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: artifacts/explorer
 
       - name: Write scale summary and manifest
         run: |
@@ -173,19 +163,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  deploy-pages:
-    name: Publish Explorer
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: collect
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy Explorer to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
