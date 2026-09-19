@@ -90,6 +90,86 @@ function safeSourceUrl(value) {
   }
 }
 
+function mediaElementHtml(media) {
+  if (!media) return "";
+  const url = safeSourceUrl(media.url);
+  const thumbnail = safeSourceUrl(media.thumbnail_url);
+  const name = escapeHtml(media.name || "Source media");
+  const host = escapeHtml(media.host || "Source");
+  const sourceNote = media.preview_only ? "Source-hosted preview" : "Remote source media";
+
+  if (media.kind === "image") {
+    const src = thumbnail !== "#" ? thumbnail : url;
+    if (src === "#") return "";
+    return `
+      <figure class="media-preview">
+        <img src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async">
+        <figcaption>${host} · ${sourceNote}</figcaption>
+      </figure>`;
+  }
+
+  if (media.kind === "video" && url !== "#") {
+    const poster = thumbnail !== "#" ? ` poster="${escapeHtml(thumbnail)}"` : "";
+    return `
+      <figure class="media-preview">
+        <video controls preload="metadata" playsinline${poster}>
+          <source src="${escapeHtml(url)}">
+          Your browser could not play this source-hosted video.
+        </video>
+        <figcaption>${host} · no autoplay</figcaption>
+      </figure>`;
+  }
+
+  if (media.kind === "audio" && url !== "#") {
+    return `
+      <figure class="media-preview media-preview-audio">
+        <audio controls preload="none">
+          <source src="${escapeHtml(url)}">
+          Your browser could not play this source-hosted audio.
+        </audio>
+        <figcaption>${host} · no autoplay</figcaption>
+      </figure>`;
+  }
+
+  if (thumbnail !== "#") {
+    return `
+      <figure class="media-preview">
+        <img src="${escapeHtml(thumbnail)}" alt="${name}" loading="lazy" decoding="async">
+        <figcaption>${host} · source item thumbnail</figcaption>
+      </figure>`;
+  }
+
+  return "";
+}
+
+function mediaSectionHtml(item) {
+  const media = item.media;
+  if (!media) return "";
+
+  if (media.sensitive) {
+    const reasons = Array.isArray(media.sensitivity_reasons) && media.sensitivity_reasons.length
+      ? media.sensitivity_reasons.join(", ")
+      : "source sensitivity flag";
+    return `
+      <div class="detail-section">
+        <div class="detail-label">Media</div>
+        <div class="sensitive-media-gate">
+          <strong>Sensitive source media</strong>
+          <p>This record is flagged by the source for ${escapeHtml(reasons)}. The media is not loaded until you choose to reveal it.</p>
+          <button type="button" class="secondary-button" data-reveal-sensitive>Reveal media</button>
+        </div>
+      </div>`;
+  }
+
+  const mediaHtml = mediaElementHtml(media);
+  if (!mediaHtml) return "";
+  return `
+    <div class="detail-section">
+      <div class="detail-label">Media</div>
+      ${mediaHtml}
+    </div>`;
+}
+
 function claimStatus(item) {
   return item.time?.status || item.location?.status || "proposed";
 }
@@ -297,8 +377,11 @@ function renderMarkers() {
       },
     ).addTo(state.map);
 
+    const tooltipThumb = item.media && !item.media.sensitive
+      ? safeSourceUrl(item.media.thumbnail_url || (item.media.kind === "image" ? item.media.url : null))
+      : "#";
     marker.bindTooltip(
-      `<div class="map-popup"><strong>${escapeHtml(item.title || "Untitled record")}</strong><span>${escapeHtml(mediaSymbol(item.media_type))} ${escapeHtml(item.media_type || "record")} · ${escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time))}</span></div>`,
+      `<div class="map-popup">${tooltipThumb !== "#" ? `<img class="map-popup-thumb" src="${escapeHtml(tooltipThumb)}" alt="">` : ""}<strong>${escapeHtml(item.title || "Untitled record")}</strong><span>${escapeHtml(mediaSymbol(item.media_type))} ${escapeHtml(item.media_type || "record")} · ${escapeHtml(fmtTime(item.time?.start_time || item.time?.end_time))}</span></div>`,
       { direction: "top", offset: [0, -5], opacity: .96 }
     );
 
@@ -458,6 +541,7 @@ function selectItem(id, focusMap) {
       </div>
       <h2>${escapeHtml(item.title || "Untitled record")}</h2>
       <div class="detail-value">${escapeHtml(item.description || "No source description.")}</div>
+      ${mediaSectionHtml(item)}
 
       <div class="detail-summary-grid">
         <div class="detail-summary-card">
@@ -507,6 +591,18 @@ function selectItem(id, focusMap) {
       <div class="detail-value">${Number(item.observation_count || 0).toLocaleString()} source observation(s)</div>
     </div>
   `;
+
+  const revealButton = detailEl.querySelector("[data-reveal-sensitive]");
+  if (revealButton && item.media) {
+    revealButton.addEventListener("click", () => {
+      const gate = detailEl.querySelector(".sensitive-media-gate");
+      if (!gate) return;
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = mediaElementHtml(item.media);
+      const mediaNode = wrapper.firstElementChild;
+      if (mediaNode) gate.replaceWith(mediaNode);
+    });
+  }
 
   if (focusMap && item.location) {
     state.map.flyTo([item.location.latitude, item.location.longitude], Math.max(state.map.getZoom(), 16), {
@@ -594,7 +690,8 @@ async function load() {
     configureTimeline();
     makeEventAnchorsClickable();
     configureMediaTypes();
-    statusEl.textContent = `${state.payload.item_count.toLocaleString()} reconstruction-oriented records · read model v${state.payload.schema_version}`;
+    const mediaCount = state.items.filter((item) => item.media).length;
+    statusEl.textContent = `${state.payload.item_count.toLocaleString()} records · ${mediaCount.toLocaleString()} with media · read model v${state.payload.schema_version}`;
     applyFilters();
   } catch (error) {
     statusEl.textContent = "Explorer data could not be loaded.";
