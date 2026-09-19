@@ -162,3 +162,32 @@ Further accuracy work needs reviewed architectural elevations, precisely timed
 camera views for motion comparison, and a sourced North Tower collapse sequence.
 The Explorer does not currently provide story threads, full camera frustums,
 authentication, or reviewer actions.
+
+
+### Aircraft approaches and impact cues
+
+The detailed scene includes neutral, approximately 767-sized procedural aircraft.
+“Inspect Flight 11 approach” and “Inspect Flight 175 approach” pause eight seconds
+before contact and select 1× playback; press Play to inspect. Each model appears
+only in the final 12 seconds before impact, disappears at contact, and is followed
+by a muted six-second impact cue and the existing damage/smoke state. There is no
+sound, flash, loop, or independent clock. Reverse scrubbing restores the aircraft.
+Disabling reconstructed motion hides aircraft and transient impact cues; the
+historical damage states remain. The simplified fallback retains its damage and
+smoke states and disables the aircraft inspection shortcuts.
+
+The short straight approach uses central estimates from
+[NIST NCSTAR 1, Table 6–4](https://tsapps.nist.gov/publication/get_pdf.cfm?lang=en&pub_id=909017):
+443/542 mph speeds, 10.6°/6° downward approach, 180.3°/13° clockwise headings from
+Plan North, and 25°/38° left-wing-down bank for Flight 11/175 respectively.
+The model's local north axis represents Plan North. Constant speed and attitude
+are extrapolated backward for visualization, not measured flight paths. Impact
+altitudes use the existing approximate damage-zone midpoints; South's lateral
+contact is offset approximately 7 m. Aircraft details and cue size/duration are
+illustrative, not a validated aircraft or fuel-fire simulation.
+
+City massing now excludes polygons touching or intersecting the reconstruction
+area using a distance filter (with a 1 m tolerance). The former `within` expression
+supports points/lines, not building polygons, and allowed modern WTC structures to
+overlap the reconstructed towers. Simplified tower layers also remain explicitly
+hidden whenever the detailed renderer is active, including after toggle changes.

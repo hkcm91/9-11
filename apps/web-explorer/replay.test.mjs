@@ -1,3 +1,4 @@
+import { TOWERS } from './scene.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SOUTH_COLLAPSE, sampleReplay, sampleSouthPose, smokeParticle, upperSectionPose } from './replay.mjs';
@@ -49,4 +50,25 @@ test('upper sections separate deterministically and restore their original offse
   const restored=upperSectionPose(1,338,300,0,1);
   assert.equal(Math.abs(restored.x),0);assert.equal(Math.abs(restored.y),0);assert.equal(restored.z,38);
   assert.equal(Math.abs(restored.angle),0);
+});
+import { sampleAircraft } from './replay.mjs';
+
+test('aircraft approach reaches the impact face and disappears at contact', () => {
+  for (const tower of TOWERS) {
+    const time = Date.parse(tower.impact);
+    assert.equal(sampleAircraft(tower,time-12001).visible,false);
+    assert.equal(sampleAircraft(tower,time-12000).visible,true);
+    const before = sampleAircraft(tower,time-1000), contact=sampleAircraft(tower,time);
+    assert.equal(before.visible,true);
+    assert.ok(before.z>contact.z);
+    assert.ok(tower.face*before.y>tower.face*contact.y);
+    assert.equal(contact.visible,false);
+    assert.equal(contact.y,tower.face*32.1);
+    assert.equal(contact.impact,1);
+    assert.equal(sampleAircraft(tower,time+6000).impact,0);
+    assert.equal(sampleAircraft(tower,time-1000,false).visible,false);
+    assert.equal(sampleAircraft(tower,time,false).impact,0);
+    sampleAircraft(tower,time+20000);
+    assert.deepEqual(sampleAircraft(tower,time-1000),before);
+  }
 });

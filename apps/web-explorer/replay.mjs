@@ -65,3 +65,26 @@ export function smokeParticle(index, age) {
     z: phase * 180, radius: 13 + phase * 30,
     opacity: (.35 + .65 * Math.sin(phase * Math.PI)) * .24 * Math.min(1, (1-phase)*8) };
 }
+
+// NIST NCSTAR 1, Table 6-4 central estimates. Only a short, straight final
+// approach is extrapolated; this is not a reconstruction of the entire flight.
+export const AIRCRAFT_APPROACH = {
+  north: { heading: 180.3, descent: 10.6, bank: 25, speed: 443 * .44704, offset: 0 },
+  south: { heading: 13, descent: 6, bank: 38, speed: 542 * .44704, offset: 7 },
+};
+export function sampleAircraft(tower, historicalTime, motion = true) {
+  const age = (Number(historicalTime) - Date.parse(tower.impact)) / 1000;
+  if (!Number.isFinite(age)) throw new TypeError('A valid historical time is required');
+  const approach = AIRCRAFT_APPROACH[tower.id];
+  const heading = approach.heading * Math.PI / 180, descent = approach.descent * Math.PI / 180;
+  const travel = age * approach.speed;
+  return { visible: motion && age >= -12 && age < 0, age,
+    x: approach.offset + Math.sin(heading) * Math.cos(descent) * travel,
+    y: tower.face * 32.1 + Math.cos(heading) * Math.cos(descent) * travel,
+    z: (tower.impactBase + tower.impactTop) / 2 - Math.sin(descent) * travel,
+    heading, descent, bank: approach.bank * Math.PI / 180,
+    // Subdued, finite impact cue; no flashes, sound, or repeating explosion.
+    impact: motion && age >= 0 && age < 6 ? (1 - age / 6) : 0,
+    radius: 9 + Math.min(6, Math.max(0, age)) * 5,
+  };
+}
