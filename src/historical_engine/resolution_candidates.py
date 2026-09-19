@@ -54,6 +54,48 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
 
 
+def _event_place_signatures(connection: sqlite3.Connection) -> dict[str, dict[str, set[str]]]:
+    """Return event -> {region,mgrs,other} place labels from graph relationships."""
+
+    rows = connection.execute(
+        """
+        SELECT r.subject_id AS event_id, r.predicate, e.canonical_name, e.attributes_json
+        FROM relationships r
+        JOIN entities e ON e.entity_id = r.object_id
+        WHERE r.subject_type = 'event'
+          AND r.object_type = 'place'
+          AND r.predicate IN ('located_in', 'occurred_at')
+        """
+    ).fetchall()
+
+    result: dict[str, dict[str, set[str]]] = {}
+    for row in rows:
+        try:
+            attrs = json.loads(row["attributes_json"] or "{}")
+        except json.JSONDecodeError:
+            attrs = {}
+        kind = str((attrs or {}).get("place_kind") or "other")
+        if kind not in {"region", "mgrs"}:
+            kind = "other"
+        label = str(row["canonical_name"] or "").strip().casefold()
+        if not label:
+            continue
+        result.setdefault(row["event_id"], {"region": set(), "mgrs": set(), "other": set()})[kind].add(label)
+    return result
+
+
+def _generic_event_name(value: str | None) -> bool:
+    tokens = _tokens(value)
+    if not tokens:
+        return True
+    generic = {
+        "other", "surv", "cache", "found", "cleared", "explosive", "hazard",
+        "ied", "explosion", "rpt", "direct", "fire", "attack", "incident",
+    }
+    informative = {token for token in tokens if token not in generic and not token.isdigit()}
+    return len(informative) <= 1
+
+
 def entity_resolution_candidates(
     connection: sqlite3.Connection,
     *,
@@ -156,6 +198,8 @@ def event_resolution_candidates(
         (collection_id,),
     ).fetchall()
 
+    place_signatures = _event_place_signatures(connection)
+
     parsed: list[dict[str, Any]] = []
     for row in rows:
         try:
@@ -197,15 +241,30 @@ def event_resolution_candidates(
             and str(lattrs.get("type")).casefold() == str(rattrs.get("type")).casefold()
         )
 
-        score = name_similarity
-        if shared_category:
-            score += 0.25
-        if shared_type:
-            score += 0.15
-        score += max(0.0, 0.35 * (1.0 - delta_hours / max_time_delta_hours))
-        score = min(1.0, score)
+        lplaces = place_signatures.get(lrow["event_id"], {"region": set(), "mgrs": set(), "other": set()})
+        rplaces = place_signatures.get(rrow["event_id"], {"region": set(), "mgrs": set(), "other": set()})
+        shared_mgrs = bool(lplaces["mgrs"] & rplaces["mgrs"])
+        conflicting_mgrs = bool(lplaces["mgrs"] and rplaces["mgrs"] and not shared_mgrs)
+        shared_region = bool(lplaces["region"] & rplaces["region"])
+
+        time_score = max(0.0, 1.0 - delta_hours / max_time_delta_hours)
+        score = (
+            0.45 * name_similarity
+            + 0.20 * time_score
+            + (0.12 if shared_category else 0.0)
+            + (0.08 if shared_type else 0.0)
+            + (0.12 if shared_mgrs else 0.0)
+            + (0.03 if shared_region else 0.0)
+        )
+        if conflicting_mgrs:
+            score -= 0.25
+        if _generic_event_name(lrow["name"]) and _generic_event_name(rrow["name"]) and not shared_mgrs:
+            score -= 0.15
+        score = max(0.0, min(1.0, score))
 
         if name_similarity < minimum_name_similarity and not (shared_category and shared_type):
+            continue
+        if score < 0.50:
             continue
 
         evidence = sorted(
@@ -226,7 +285,12 @@ def event_resolution_candidates(
                 "time_delta_hours": round(delta_hours, 3),
                 "shared_category": bool(shared_category),
                 "shared_type": bool(shared_type),
-                "heuristic": "time_type_name_structured_similarity",
+                "shared_mgrs": shared_mgrs,
+                "conflicting_mgrs": conflicting_mgrs,
+                "shared_region": shared_region,
+                "subject_mgrs": sorted(lplaces["mgrs"]),
+                "object_mgrs": sorted(rplaces["mgrs"]),
+                "heuristic": "time_type_name_location_similarity_v2",
             },
         )
         candidates.append((score, request))
