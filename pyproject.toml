@@ -23,6 +23,7 @@ where = ["src"]
 # Collections ship their ontology, source registry and fixtures as data.
 "evidence_collections.september11" = ["*.yaml"]
 "evidence_collections.demo_history" = ["*.yaml", "fixtures/*.jsonl"]
+"evidence_collections.wikileaks" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

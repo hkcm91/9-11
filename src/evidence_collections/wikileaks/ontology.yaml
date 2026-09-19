@@ -1,0 +1,38 @@
+collection_id: wikileaks
+version: "1"
+
+extra_entity_types:
+  - diplomatic_mission
+  - government_agency
+  - military_unit
+  - media_outlet
+
+extra_event_types:
+  - diplomatic_meeting
+  - sigact
+  - military_incident
+  - document_release
+
+extra_predicates:
+  - sent_from
+  - sent_to
+  - references_document
+  - reported_by
+  - released_in
+  - corroborates_claim
+  - contradicts_claim
+
+extra_record_roles:
+  - event_record
+
+sensitive:
+  note: >-
+    Public leaked records may contain allegations, hearsay, intelligence assessments,
+    personal information, or incomplete context. Mention does not imply association,
+    wrongdoing, corroboration, or established fact.
+  force_human_review_roles:
+    - event_record
+  prohibited_inferences:
+    - infer_guilt_from_mention
+    - infer_wrongdoing_from_association
+    - infer_identity_without_corroboration
