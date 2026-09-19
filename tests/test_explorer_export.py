@@ -24,7 +24,18 @@ def _build_database(tmp_path: Path) -> Path:
         creator_raw="Jane Example",
         rights_raw="source terms apply",
         media_type_raw="photo",
-        metadata_raw={"original": True},
+        metadata_raw={
+            "original": True,
+            "media_attachments": [
+                {
+                    "id": 5,
+                    "name": "frame.jpg",
+                    "content_type": "image/jpeg",
+                    "url": "https://media.example.test/frame.jpg",
+                }
+            ],
+            "sensitivity_flags": {"graphic": True},
+        },
         ingested_at=datetime(2026, 9, 18, tzinfo=timezone.utc),
     )
     document = SourceItem(
@@ -117,7 +128,7 @@ def test_exporter_keeps_claim_provenance_and_excludes_document_date_as_timeline_
         end=datetime.fromisoformat("2001-09-11T12:00:00-04:00"),
     )
 
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["item_count"] == 1
     item = payload["items"][0]
     assert item["id"] == "photo:1"
@@ -128,6 +139,10 @@ def test_exporter_keeps_claim_provenance_and_excludes_document_date_as_timeline_
     assert item["location"]["heading_deg"] == 270.0
     assert item["entities"][0]["role"] == "photographer"
     assert item["rights"] == "source terms apply"
+    assert item["media"]["kind"] == "image"
+    assert item["media"]["url"] == "https://media.example.test/frame.jpg"
+    assert item["media"]["sensitive"] is True
+    assert item["media"]["sensitivity_reasons"] == ["graphic"]
 
 
 def test_exporter_respects_confidence_threshold(tmp_path: Path) -> None:
