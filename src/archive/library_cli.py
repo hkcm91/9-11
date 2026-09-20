@@ -170,6 +170,9 @@ def handler_for(database, objects, *, jev_factory=None):
                     return self.respond(200, library.inventory_coverage())
                 if parsed.path == "/api/coverage":
                     return self.respond(200, library.coverage(public_only=True))
+                if parsed.path == '/api/wikileaks/bulk':
+                    from archive.library_wikileaks_bulk import bulk_status
+                    return self.respond(200, bulk_status(library, Path(database).parent / 'wikileaks-bulk'))
                 if parsed.path in {'/api/completion','/api/completion/items'}:
                     from archive.library_completion import CompletionDesk
                     desk = CompletionDesk(library)
@@ -270,6 +273,9 @@ def main(argv=None):
     bulk.add_argument("--max-total-mib", type=int, default=1024)
     bulk.add_argument("--limit", type=int)
     bulk.add_argument("--refresh", action="store_true")
+    full_cablegate = commands.add_parser("fetch-cablegate-full")
+    full_cablegate.add_argument("--output-dir", type=Path, default=Path("artifacts/wikileaks-bulk"))
+    full_cablegate.add_argument("--max-records", type=int)
     cablegate = commands.add_parser("fetch-cablegate")
     cablegate.add_argument("--output-dir", type=Path, default=Path("artifacts/cablegate-sample"))
     cablegate.add_argument("--limit", type=int, default=1000)
@@ -329,6 +335,10 @@ def main(argv=None):
             from archive.library_sources import bulk_ingest
             result = bulk_ingest(library, args.manifest, max_file_bytes=args.max_file_mib * 1024**2,
                 max_total_bytes=args.max_total_mib * 1024**2, limit=args.limit, refresh=args.refresh,
+                progress=lambda row: print(json.dumps(row), flush=True))
+        elif args.command == "fetch-cablegate-full":
+            from archive.library_wikileaks_bulk import fetch_full
+            result = fetch_full(library, args.output_dir, args.max_records,
                 progress=lambda row: print(json.dumps(row), flush=True))
         elif args.command == "fetch-cablegate":
             from archive.library_cablegate import fetch_cablegate

@@ -526,6 +526,7 @@ async function mountDigest(doc, box) {
 let completionReleases = [], completionOffset = 0, completionGeneration = 0, completionBusy = false;
 function currentRelease() { return completionReleases[Number($('completion-release').value)]; }
 async function loadCompletion(keep = false) {
+  await showBulkProgress();
   const previous = currentRelease();
   completionReleases = await api('/api/completion');
   $('completion-release').replaceChildren();
@@ -614,4 +615,23 @@ $('completion-find').onsubmit = async event => {
 };
 $('completion-match').onsubmit = event => { event.preventDefault(); completionAction('match',
   {source_item_id:$('completion-expected').value, candidate:$('completion-candidate').value}); };
+async function showBulkProgress() {
+  const status = await api('/api/wikileaks/bulk');
+  let panel = $('wikileaks-bulk-progress');
+  if (!panel) {
+    panel = el('section', undefined, 'card'); panel.id = 'wikileaks-bulk-progress';
+    $('completion-summary').before(panel);
+  }
+  const gb = bytes => (bytes / 1000000000).toFixed(2) + ' GB';
+  panel.replaceChildren(el('h2', 'WikiLeaks bulk acquisition'),
+    el('p', 'Cablegate: ' + gb(status.preserved_bytes) + ' preserved of ' + (status.expected_bytes ? gb(status.expected_bytes) : 'unknown size')),
+    el('p', status.transport_verified ? 'Full transport checksum checked. Record extraction and review are tracked separately.' : 'Partial transport. Contents will be imported after the complete file passes its checksum.', 'meta'));
+  for (const job of status.jobs) panel.append(el('p', job.rows.toLocaleString() + ' rows processed · '
+    + job.imported.toLocaleString() + ' new records · ' + job.duplicates.toLocaleString() + ' reused · '
+    + job.rejected.toLocaleString() + ' rejected · ' + (job.complete ? 'end of CSV reached' : 'import incomplete')
+    + (job.error ? ' · ' + job.error : '')));
+  const refresh = el('button', 'Refresh acquisition progress');
+  refresh.onclick = () => showBulkProgress().catch(error => { $('completion-status').textContent = error.message; });
+  panel.append(el('p', 'Saved progress only; this does not confirm a worker is currently running. Other releases are listed below.', 'meta'), refresh);
+}
 loadCompletion().catch(error => { $('completion-status').textContent = error.message; });

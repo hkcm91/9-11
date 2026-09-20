@@ -13,6 +13,7 @@ artifacts/cablegate-metadata.json
 artifacts/cablegate-sample/
 artifacts/cablegate-validated/
 artifacts/cablegate-fulltext/
+artifacts/wikileaks-bulk/
 artifacts/cablegate-prefix.bin
 artifacts/cable-original.html
 artifacts/warlog-original.html

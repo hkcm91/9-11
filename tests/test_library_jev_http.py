@@ -40,6 +40,18 @@ def serving(tmp_path, provider=None):
         library.close()
 
 
+def test_bulk_progress_endpoint_distinguishes_partial_transport(tmp_path):
+    with serving(tmp_path) as (lib, identifier, base, post):
+        output = tmp_path / 'wikileaks-bulk'
+        output.mkdir()
+        (output/'cables.csv.part').write_bytes(b'partial')
+        with urlopen(base + '/api/wikileaks/bulk') as response:
+            result = json.load(response)
+        assert result['preserved_bytes'] == 7
+        assert result['transport_verified'] is False
+        assert result['jobs'] == []
+
+
 def test_http_comparison_citations_cache_and_publication_gate(tmp_path):
     provider = FakeDecisionProvider()
     with serving(tmp_path, provider) as (lib, identifier, base, post):
