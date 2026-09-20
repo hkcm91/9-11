@@ -18,6 +18,7 @@ def source(tmp_path):
 def test_subject_title_and_safe_filename():
     assert readable_title('72TEHRAN1164', 'SUBJECT: AIRCRAFT FOR IRAN\nREF: 1') == 'Aircraft For Iran'
     assert readable_title('Original title', 'No subject header') == 'Original title'
+    assert readable_title('85CODE123', 'SUBJ: BUSINESS IN BRUNEI\n1. First paragraph') == 'Business In Brunei'
     name = file_stem('../../bad\r\n"title', 'abcdef123456')
     assert '/' not in name and '\r' not in name and '"' not in name and name.endswith('abcdef1234')
 

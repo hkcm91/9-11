@@ -4,8 +4,9 @@ import io
 import json
 import pytest
 from archive.document_library import DocumentLibrary
-from archive.library_wikileaks_bulk import import_full, download
+from archive.library_wikileaks_bulk import import_full, download, valid_afghan_row, fetch_afghan
 from archive.library_wikileaks_catalog import release_scopes
+from evidence_collections.wikileaks.remote_sources import WAR_DIARY_FIELDS
 
 
 def source(tmp_path):
@@ -82,3 +83,55 @@ def test_ignored_range_never_appends_wrong_bytes(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match='resume range'):
         download(tmp_path)
     assert partial.read_bytes() == b'partial'
+
+
+def test_afghan_dialect_preserves_full_narrative_and_resume(tmp_path):
+    path = tmp_path/'afg.csv'
+    row = {f:'' for f in WAR_DIARY_FIELDS}
+    row.update(ReportKey='D92871CA-D217-4124-B8FB-89B9A2CFFCB4',Summary='Initial "quoted" report\nUPDATE: corrected C:\\path. ',Title='Report',DateOccurred='2004-01-01')
+    with path.open('w',encoding='utf-8',newline='') as stream:
+        writer=csv.DictWriter(stream,fieldnames=WAR_DIARY_FIELDS)
+        writer.writerow(row)
+    receipt=dict(bytes=path.stat().st_size,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),source_url='https://example.org/afghan')
+    library=DocumentLibrary(tmp_path/'test.sqlite',tmp_path/'objects')
+    result=import_full(library,path,receipt,kind='afghan')
+    assert result['complete'] and result['rows']==1
+    assert library.db.execute('SELECT text FROM library_pages').fetchone()[0]==row['Summary']
+    assert import_full(library,path,receipt,kind='afghan')['rows']==1
+    library.close()
+
+
+def test_afghan_legacy_numeric_ids_are_real_records():
+    row={f:'' for f in WAR_DIARY_FIELDS}
+    row.update(ReportKey='1009075',Summary='Complete narrative')
+    assert valid_afghan_row(row)
+    row['ReportKey']='77980224-2219-0B3F-9F3AAB156E5ED8F9'
+    assert valid_afghan_row(row)
+    row['Summary']=' '
+    assert not valid_afghan_row(row)
+
+
+def test_deduplication_preserves_trailing_whitespace(tmp_path):
+    path,receipt=source(tmp_path)
+    library=DocumentLibrary(tmp_path/'test.sqlite',tmp_path/'objects')
+    import_full(library,path,receipt)
+    # Simulate losing a checkpoint after ingestion: exact source bodies are reused.
+    with library.db: library.db.execute('DELETE FROM library_bulk_jobs')
+    result=import_full(library,path,receipt)
+    assert result['duplicates']==2 and result['imported']==0
+    assert library.db.execute('SELECT count(*) FROM library_documents').fetchone()[0]==2
+    library.close()
+
+
+def test_afghan_archive_rejects_unexpected_members(tmp_path, monkeypatch):
+    import py7zr
+    source=tmp_path/'unexpected.txt'; source.write_text('Not the CSV')
+    compressed=tmp_path/'source.7z'
+    with py7zr.SevenZipFile(compressed,'w') as archive:
+        archive.write(source,arcname='unexpected.txt')
+    monkeypatch.setattr('archive.library_wikileaks_bulk.download',lambda *a,**k:(compressed,{}))
+    library=DocumentLibrary(tmp_path/'test.sqlite',tmp_path/'objects')
+    with pytest.raises(ValueError,match='member layout'):
+        fetch_afghan(library,tmp_path)
+    assert not (tmp_path/'afg.csv').exists()
+    library.close()

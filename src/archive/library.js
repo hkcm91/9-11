@@ -142,6 +142,9 @@ async function search(reset = true) {
       const heading = el('h2');
       heading.append(link(row.display_title || row.title, '#doc=' + row.id + '&page=' + row.page));
       if (row.display_title && row.display_title !== row.title) card.append(el('div', row.title, 'meta'));
+      if (row.brief_summary) {
+        const brief=el('details'); brief.append(el('summary','Brief summary'),el('p',row.brief_summary),el('div',row.summary_status,'meta')); card.append(brief);
+      }
       card.append(heading, el('div', 'Page ' + row.page + ' · ' + (row.extraction_status === 'indexed' ? 'Preserved text' : row.extraction_status.replaceAll('_', ' ')), 'meta'), highlighted(row.excerpt));
       $('results').append(card);
     }
@@ -191,7 +194,14 @@ async function read() {
     const details = el('details');
     details.append(el('summary', 'Source integrity'), el('p', 'SHA-256: ' + doc.sha256, 'meta'));
     box.append(details);
-    if (doc.display_title && doc.display_title !== doc.title) box.append(el('p', 'Source subject heading · Original identifier: ' + doc.title, 'meta'));
+    if (doc.display_title && doc.display_title !== doc.title) box.append(el('p', 'Reading title · Original identifier: ' + doc.title, 'meta'));
+    if (doc.brief_summary) {
+      const brief = el('section', undefined, 'card');
+      brief.append(el('h3', 'Brief summary'), el('p', doc.brief_summary), el('p', doc.summary_status + ' · Quoted source passages; claims remain unverified.', 'meta'));
+      for (const passage of doc.editorial?.summary_passages || []) brief.append(link('Source passage · page ' + passage.page, pageLink(doc.id,passage.page)));
+      if (doc.editorial) brief.append(el('p', 'Pages assessed: ' + doc.editorial.sampled_pages.join(', ') + ' of ' + doc.editorial.total_pages, 'meta'));
+      box.append(brief);
+    }
     const digestPanel = el('details');
     digestPanel.append(el('summary', 'Reading brief & noteworthy passages'));
     const digestBody = el('div'); digestPanel.append(digestBody); box.append(digestPanel);
@@ -626,10 +636,16 @@ async function showBulkProgress() {
   panel.replaceChildren(el('h2', 'WikiLeaks bulk acquisition'),
     el('p', 'Cablegate: ' + gb(status.preserved_bytes) + ' preserved of ' + (status.expected_bytes ? gb(status.expected_bytes) : 'unknown size')),
     el('p', status.transport_verified ? 'Full transport checksum checked. Record extraction and review are tracked separately.' : 'Partial transport. Contents will be imported after the complete file passes its checksum.', 'meta'));
-  for (const job of status.jobs) panel.append(el('p', job.rows.toLocaleString() + ' rows processed · '
+  for (const job of status.jobs) panel.append(el('p', (job.title || 'Cablegate') + ': ' + job.rows.toLocaleString() + ' rows processed · '
     + job.imported.toLocaleString() + ' new records · ' + job.duplicates.toLocaleString() + ' reused · '
     + job.rejected.toLocaleString() + ' rejected · ' + (job.complete ? 'end of CSV reached' : 'import incomplete')
     + (job.error ? ' · ' + job.error : '')));
+  for (const inventory of status.inventories || []) panel.append(el('p', inventory.title + ' source scan: '
+    + inventory.rows.toLocaleString() + ' total rows · ' + inventory.unique_valid_ids.toLocaleString()
+    + ' distinct usable records · ' + inventory.rejected.toLocaleString() + ' rejected rows preserved in the source file.', 'meta'));
+  if (status.editorial) panel.append(el('h3','Jev titles and briefs'),el('p',status.editorial.processed.toLocaleString()
+    + ' documents assessed · ' + status.editorial.reviewed.toLocaleString() + ' title-and-brief selections accepted · '
+    + status.editorial.pending_imported.toLocaleString() + ' imported documents pending assessment'));
   const refresh = el('button', 'Refresh acquisition progress');
   refresh.onclick = () => showBulkProgress().catch(error => { $('completion-status').textContent = error.message; });
   panel.append(el('p', 'Saved progress only; this does not confirm a worker is currently running. Other releases are listed below.', 'meta'), refresh);

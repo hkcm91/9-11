@@ -193,8 +193,10 @@ class DocumentLibrary:
             if digest(target.read_bytes()) != sha:
                 raise ValueError("Preserved object failed integrity check")
         else:
-            with target.open("xb") as handle:
-                handle.write(payload)
+            from archive.library_sources import preserve_stream
+            # Publish the completed object atomically. Interrupting a write must
+            # not leave a partial file under the final content hash.
+            target, _ = preserve_stream(io.BytesIO(payload), self.objects, MAX_BYTES, sha)
         return self.ingest_preserved(entry, target)
 
     @staticmethod

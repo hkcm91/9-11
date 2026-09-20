@@ -276,6 +276,14 @@ def main(argv=None):
     full_cablegate = commands.add_parser("fetch-cablegate-full")
     full_cablegate.add_argument("--output-dir", type=Path, default=Path("artifacts/wikileaks-bulk"))
     full_cablegate.add_argument("--max-records", type=int)
+    full_afghan = commands.add_parser("fetch-afghan-full")
+    full_afghan.add_argument("--output-dir", type=Path, default=Path("artifacts/wikileaks-bulk/afghan"))
+    full_afghan.add_argument("--max-records", type=int)
+    editorial = commands.add_parser('enrich-documents')
+    editorial.add_argument('--limit',type=int,default=100)
+    editorial.add_argument('--include-unpublished',action='store_true')
+    editorial.add_argument('--collection',default='')
+    editorial.add_argument('--follow-imports',action='store_true')
     cablegate = commands.add_parser("fetch-cablegate")
     cablegate.add_argument("--output-dir", type=Path, default=Path("artifacts/cablegate-sample"))
     cablegate.add_argument("--limit", type=int, default=1000)
@@ -335,6 +343,18 @@ def main(argv=None):
             from archive.library_sources import bulk_ingest
             result = bulk_ingest(library, args.manifest, max_file_bytes=args.max_file_mib * 1024**2,
                 max_total_bytes=args.max_total_mib * 1024**2, limit=args.limit, refresh=args.refresh,
+                progress=lambda row: print(json.dumps(row), flush=True))
+        elif args.command == 'enrich-documents':
+            from archive.library_editorial import EditorialDesk, JevEditor
+            desk = EditorialDesk(library)
+            progress = lambda row: print(json.dumps(row), flush=True)
+            if args.follow_imports:
+                result = desk.follow(JevEditor(),args.limit,args.include_unpublished,args.collection,progress)
+            else:
+                result = desk.batch(JevEditor(),args.limit,args.include_unpublished,progress,args.collection)
+        elif args.command == "fetch-afghan-full":
+            from archive.library_wikileaks_bulk import fetch_afghan
+            result = fetch_afghan(library, args.output_dir, args.max_records,
                 progress=lambda row: print(json.dumps(row), flush=True))
         elif args.command == "fetch-cablegate-full":
             from archive.library_wikileaks_bulk import fetch_full

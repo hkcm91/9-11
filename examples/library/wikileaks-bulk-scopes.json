@@ -1,0 +1,22 @@
+[
+  {
+    "collection": "wikileaks",
+    "release_id": "cablegate-ia-bulk-v1",
+    "title": "Cablegate \u2014 full CSV mirror import",
+    "inventory_status": "partial_catalog",
+    "expected_files": 251287,
+    "catalog_url": "https://archive.org/download/wikileaks-cables-csv/cables.csv",
+    "snapshot_sha256": "ad9b7530f038e4237f1729843d1dc096a63162a4ff8024e596ec3b2a8e64b139",
+    "scope_note": "Verified transport contains 251,287 rows; 251,233 distinct usable records and 54 rejected rows. Full indexing and publication review remain incomplete. These are mirror row counts, not proof of all publisher files or attachments."
+  },
+  {
+    "collection": "wikileaks",
+    "release_id": "afghan-ia-bulk-v1",
+    "title": "Afghan War Diary \u2014 full CSV mirror import",
+    "inventory_status": "partial_catalog",
+    "expected_files": 76911,
+    "catalog_url": "https://archive.org/download/WikileaksWarDiaryCsv/afg-war-diary.csv.7z",
+    "snapshot_sha256": "4e64cef9bab6c8fec63e28495fe9b66d375e3720e9624377652785380f429100",
+    "scope_note": "Verified transport contains 76,911 rows; 76,882 distinct usable records and 29 rejected rows. Full indexing and publication review remain incomplete. These are mirror row counts, not proof of all publisher files or attachments."
+  }
+]

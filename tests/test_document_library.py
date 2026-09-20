@@ -43,6 +43,18 @@ def test_versions_deduplication_and_provenance(library, tmp_path):
     assert len(list(library.objects.iterdir())) == 2
 
 
+def test_interrupted_object_publish_leaves_no_partial_final_file(library,tmp_path,monkeypatch):
+    from pathlib import Path
+    item=entry(tmp_path,text='Complete source bytes')
+    def interrupted(*args,**kwargs): raise KeyboardInterrupt()
+    with monkeypatch.context() as context:
+        context.setattr(Path,'hardlink_to',interrupted)
+        with pytest.raises(KeyboardInterrupt): library.ingest(item)
+    assert list(library.objects.iterdir())==[]
+    identifier=library.ingest(item)
+    assert library.db.execute('SELECT count(*) FROM library_documents WHERE id=?',(identifier,)).fetchone()[0]==1
+
+
 def test_publication_gate_search_citations_and_withdrawal(library, tmp_path):
     identifier = library.ingest(entry(tmp_path))
     assert not library.search("diplomatic")

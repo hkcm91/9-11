@@ -8,7 +8,7 @@ from historical_engine.ai.questions import DecisionRequest, DecisionQuestion
 
 
 def readable_title(original, text):
-    subject = re.search(r'\bSUBJECT:\s*(.*?)(?=\n\s*\n|\bREF(?:ERENCE)?\s*:|\b\d+\.\s|$)', text[:6000], re.I | re.S)
+    subject = re.search(r'\bSUB(?:JECT|J):\s*(.*?)(?=\n\s*\n|\bREF(?:ERENCE)?\s*:|\b\d+\.\s|$)', text[:6000], re.I | re.S)
     if not subject:
         return original
     title = re.sub(r'\s+', ' ', subject.group(1)).strip(' -:')
@@ -28,9 +28,19 @@ def file_stem(title, identifier):
 
 
 def decorate(library, doc):
+    from archive.library_editorial import saved_editorial
     page = library.page(doc['id'], 1)
     title = readable_title(doc['title'], page['text'] if page else '')
-    return {**doc, 'display_title': title, 'original_title': doc['title']}
+    editorial = saved_editorial(library, doc['id'])
+    if editorial and editorial['title'].lower()==doc['title'].lower() and not re.search(r'\s',doc['title']):
+        editorial = {**editorial,'title':doc['title']}
+    text = page['text'] if page else ''
+    summary = re.search(r'\b(?:BEGIN SUMMARY|SUMMARY)\s*[:.\-]?',text[:8000],re.I)
+    preview = text[summary.end():summary.end()+550] if summary else text[:550]
+    return {**doc, 'display_title': editorial['title'] if editorial else title, 'original_title': doc['title'],
+        'brief_summary': editorial['summary'] if editorial else preview,
+        'summary_status': editorial['status'] if editorial else 'Source excerpt · Jev review pending',
+        'editorial': editorial}
 
 
 class DocumentDigest:

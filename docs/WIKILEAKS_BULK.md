@@ -39,6 +39,27 @@ rejections, byte offset and end-of-file status. `complete` here means the CSV
 was consumed; it does **not** certify all rows accepted, all publisher pages
 matched, all attachments acquired, or all WikiLeaks releases archived.
 
+## Afghan War Diary transport
+
+`python -m archive.library_cli fetch-afghan-full` preserves and verifies the
+16,076,742-byte `WikileaksWarDiaryCsv/afg-war-diary.csv.7z` mirror. Its advertised
+SHA-1 is `d6b82f955a7beb9589f92e9487c74669d1912a34`. Only the single regular
+`afg.csv` member is extracted, within a 512 MiB bound and an isolated directory.
+The extracted CSV receives its own SHA-256 receipt and exact-byte checkpoints.
+
+This source uses a different CSV dialect from Cablegate and mixes GUID and
+legacy numeric and shortened hexadecimal report keys. These are treated as
+opaque identifiers, not required to be UUIDs. The full Summary field is
+preserved verbatim as the readable narrative; all other fields remain in the
+normalized source record. Empty narratives stay in the original transport and
+rejection ledger. Mirrored narratives have not been checked against every
+publisher page or its redactions, so new records remain pending review.
+
+Bulk import connections use SQLite WAL with NORMAL synchronization. A power
+failure can lose a recent transaction tail; the committed checkpoint allows
+idempotent replay against the retained, verified source. Normal application
+connections retain their existing synchronization setting.
+
 ## Remaining release work
 
 Each release still requires a file-level catalog, available transport checks,
