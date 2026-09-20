@@ -10,7 +10,7 @@ DEFAULT_TYPESAFE_AUTH_HEADER = "Authorization"
 DEFAULT_TYPESAFE_AUTH_PREFIX = "Bearer"
 
 
-def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[str, str]:
+def load_env_file(path: Path | str = ".env", *, override: bool = False, export: bool = True) -> dict[str, str]:
     """Load a small dotenv-style file without adding a runtime dependency.
 
     Supports KEY=value, optional single/double quotes, blank lines, and comments.
@@ -41,7 +41,7 @@ def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[
             value = value[1:-1]
 
         loaded[key] = value
-        if override or key not in os.environ:
+        if export and (override or key not in os.environ):
             os.environ[key] = value
 
     return loaded
@@ -83,13 +83,14 @@ def typesafe_config_from_env(
     load_dotenv: bool = True,
     dotenv_path: Path | str = ".env",
 ) -> TypeSafeConfig:
-    if load_dotenv:
-        load_env_file(dotenv_path)
+    # Read fresh local settings without freezing them into process environment.
+    values = load_env_file(dotenv_path, export=False) if load_dotenv else {}
+    values.update(os.environ)
 
     return TypeSafeConfig(
-        api_key=os.environ.get("TYPESAFE_API_KEY"),
-        api_url=os.environ.get("TYPESAFE_API_URL") or DEFAULT_TYPESAFE_API_URL,
-        auth_header=os.environ.get("TYPESAFE_API_AUTH_HEADER") or DEFAULT_TYPESAFE_AUTH_HEADER,
-        auth_prefix=os.environ.get("TYPESAFE_API_AUTH_PREFIX") or DEFAULT_TYPESAFE_AUTH_PREFIX,
-        model=os.environ.get("TYPESAFE_MODEL") or DEFAULT_TYPESAFE_MODEL,
+        api_key=values.get("TYPESAFE_API_KEY"),
+        api_url=values.get("TYPESAFE_API_URL") or DEFAULT_TYPESAFE_API_URL,
+        auth_header=values.get("TYPESAFE_API_AUTH_HEADER") or DEFAULT_TYPESAFE_AUTH_HEADER,
+        auth_prefix=values.get("TYPESAFE_API_AUTH_PREFIX") or DEFAULT_TYPESAFE_AUTH_PREFIX,
+        model=values.get("TYPESAFE_MODEL") or DEFAULT_TYPESAFE_MODEL,
     )

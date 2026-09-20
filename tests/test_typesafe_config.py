@@ -73,3 +73,15 @@ def test_documented_endpoint_is_default(monkeypatch) -> None:
     assert config.api_url == "https://api.typesafe.ai/v1/systemone"
     assert config.model == "jev-latest"
     assert config.ready_for_transport is True
+
+
+def test_local_settings_refresh_without_mutating_environment(tmp_path, monkeypatch):
+    monkeypatch.delenv('TYPESAFE_API_KEY', raising=False)
+    path = tmp_path / '.env'
+    path.write_text('TYPESAFE_API_KEY=\n')
+    assert not typesafe_config_from_env(dotenv_path=path).has_api_key
+    path.write_text('TYPESAFE_API_KEY=updated\n')
+    assert typesafe_config_from_env(dotenv_path=path).api_key == 'updated'
+    path.write_text('TYPESAFE_API_KEY=rotated\n')
+    assert typesafe_config_from_env(dotenv_path=path).api_key == 'rotated'
+    assert 'TYPESAFE_API_KEY' not in __import__('os').environ

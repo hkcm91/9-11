@@ -1,0 +1,213 @@
+import json
+from contextlib import contextmanager
+from http.server import ThreadingHTTPServer
+from threading import Thread
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+import pytest
+from archive.document_library import DocumentLibrary
+from archive.library_cli import handler_for
+from historical_engine.ai.fakes import FakeDecisionProvider
+from historical_engine.ai.providers import AiProviderError
+
+
+@contextmanager
+def serving(tmp_path, provider=None):
+    library = DocumentLibrary(tmp_path / 'test.sqlite', tmp_path / 'objects')
+    identifier = library.ingest(dict(collection='wikileaks', release_id='test',
+        source_item_id='one', source_url='https://example.org/one', title='Source', format='text'),
+        payload=b'First original passage\fSecond original passage')
+    library.publish(identifier, True, 'test', 'Approved')
+    server = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(library.store.path, library.objects,
+        jev_factory=(lambda: provider) if provider else None))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f'http://127.0.0.1:{server.server_port}'
+    def post(values=None, **headers):
+        body = dict(left=identifier, right=identifier, left_page=1, right_page=2, question='same_event')
+        body.update(values or {})
+        request = Request(base + '/api/compare', data=json.dumps(body).encode(), headers={
+            'Content-Type': 'application/json', 'Origin': base, 'X-Archive-Request': '1', **headers})
+        with urlopen(request) as response:
+            return json.load(response)
+    try:
+        yield library, identifier, base, post
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        library.close()
+
+
+def test_bulk_progress_endpoint_distinguishes_partial_transport(tmp_path):
+    with serving(tmp_path) as (lib, identifier, base, post):
+        output = tmp_path / 'wikileaks-bulk'
+        output.mkdir()
+        (output/'cables.csv.part').write_bytes(b'partial')
+        with urlopen(base + '/api/wikileaks/bulk') as response:
+            result = json.load(response)
+        assert result['preserved_bytes'] == 7
+        assert result['transport_verified'] is False
+        assert result['jobs'] == []
+
+
+def test_workbench_mutations_require_same_origin_and_keep_citations(tmp_path):
+    with serving(tmp_path) as (lib, identifier, base, post):
+        def save(path,body,origin=None):
+            request=Request(base+'/api/workbench/'+path,data=json.dumps(body).encode(),headers={
+                'Content-Type':'application/json','Origin':origin or base,'X-Archive-Request':'1'})
+            with urlopen(request) as response: return json.load(response)
+        with pytest.raises(HTTPError) as failure: save('folders',{'title':'Unauthorized'},'https://example.org')
+        assert failure.value.code==403
+        folder=save('folders',{'title':'Investigation','question':'What changed?'})
+        result=save('items',{'folder_id':folder['id'],'kind':'quote','document_id':identifier,'page':1,'text':'First original passage'})
+        assert result['items'][0]['source_sha256']==lib.document(identifier)['sha256']
+        with urlopen(base+'/api/workbench/export?id='+folder['id']) as response:
+            assert b'First original passage' in response.read()
+        request=Request(base+'/api/workbench/document?id='+identifier,headers={'Host':'untrusted.example'})
+        with pytest.raises(HTTPError) as failure: urlopen(request)
+        assert failure.value.code==403
+
+
+def test_http_comparison_citations_cache_and_publication_gate(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, identifier, base, post):
+        record = lib.document(identifier)['record_id']
+        provider.script('same_event', record, 'same', .95, object_id=record)
+        result = post()
+        assert result['review_status'] == 'proposed'
+        assert [p['text'] for p in result['passages']] == ['First original passage', 'Second original passage']
+        assert post() == result
+        assert len(provider.calls) == 1
+        lib.publish(identifier, False, 'test', 'Withdraw')
+        with pytest.raises(HTTPError) as exc:
+            post()
+        assert exc.value.code == 400
+        assert len(provider.calls) == 1
+
+
+def test_http_rejects_cross_origin_and_invalid_input_without_calling_jev(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (_, _, _, post):
+        for headers in ({'Origin': 'https://evil.example'}, {'X-Archive-Request': ''}, {'Host': 'evil.example'}):
+            with pytest.raises(HTTPError) as exc:
+                post(**headers)
+            assert exc.value.code == 403
+        for body in ({'question': 'invented'}, {'left_page': True}, {'right_page': -1}):
+            with pytest.raises(HTTPError) as exc:
+                post(body)
+            assert exc.value.code == 400
+        assert not provider.calls
+
+
+def test_missing_credentials_and_secret_safe_status(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv('TYPESAFE_API_KEY', raising=False)
+    with serving(tmp_path) as (_, _, base, post):
+        with urlopen(base + '/api/jev/status') as response:
+            assert json.load(response)['configured'] is False
+        with pytest.raises(HTTPError) as exc:
+            post()
+        assert exc.value.code == 503
+        (tmp_path / '.env').write_text('TYPESAFE_API_KEY=never-expose-this\n')
+        with urlopen(base + '/api/jev/status') as response:
+            text = response.read().decode()
+            assert json.loads(text)['configured'] is True
+            assert 'never-expose-this' not in text
+
+
+def test_provider_error_does_not_expose_transport_details(tmp_path):
+    class Broken(FakeDecisionProvider):
+        def decide(self, request):
+            raise AiProviderError('secret-provider-response')
+    with serving(tmp_path, Broken()) as (_, _, _, post):
+        with pytest.raises(HTTPError) as exc:
+            post()
+        assert exc.value.code == 502
+        assert b'secret-provider-response' not in exc.value.read()
+
+
+def test_lead_routes_scan_assess_and_review_with_origin_gate(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, _, base, _):
+        identifier = lib.ingest(dict(collection='wikileaks', release_id='test', source_item_id='update',
+            source_url='https://example.org/update', title='Update', format='text'),
+            payload=b'Unknown chemicals. UPDATE: Found supplements.')
+        lib.publish(identifier, True, 'test', 'Source reviewed')
+        def call(path, values, origin=base):
+            request = Request(base + '/api/leads/' + path, data=json.dumps(values).encode(),
+                headers={'Content-Type': 'application/json', 'Origin': origin, 'X-Archive-Request': '1'})
+            with urlopen(request) as response:
+                return json.load(response)
+        with pytest.raises(HTTPError) as exc:
+            call('run', {}, 'https://other.example')
+        assert exc.value.code == 403
+        assert call('scan', {})['created'] == 1
+        assert not provider.calls
+        result = call('run', {})
+        assert len(result['results']) == 1 and len(provider.calls) == 1
+        lead_id = result['results'][0]['id']
+        assert call('review', dict(id=lead_id, status='investigating', note='Verify final update'))['status'] == 'investigating'
+        with urlopen(base + '/api/leads') as response:
+            assert json.load(response)[0]['reviews'][0]['note'] == 'Verify final update'
+
+
+def test_research_endpoint_history_and_origin_gate(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (_, _, base, _):
+        body = json.dumps(dict(question='Original passage', budget=1)).encode()
+        headers = {'Content-Type': 'application/json', 'Origin': 'https://other.example', 'X-Archive-Request': '1'}
+        with pytest.raises(HTTPError) as exc:
+            urlopen(Request(base + '/api/research', data=body, headers=headers))
+        assert exc.value.code == 403 and not provider.calls
+        headers['Origin'] = base
+        with urlopen(Request(base + '/api/research', data=body, headers=headers)) as response:
+            result = json.load(response)
+        assert result['assessed_pages'] == 1
+        with urlopen(base + '/api/research') as response:
+            assert json.load(response)[0]['id'] == result['id']
+        with urlopen(base + '/api/research/' + result['id']) as response:
+            assert json.load(response)['findings'][0]['passages'][0]['text']
+
+
+def test_reading_brief_api_and_formatted_download(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, identifier, base, _):
+        request = Request(base + '/api/digest', data=json.dumps({'id': identifier}).encode(),
+            headers={'Content-Type': 'application/json', 'Origin': base, 'X-Archive-Request': '1'})
+        with urlopen(request) as response:
+            assert json.load(response)['original_title'] == 'Source'
+        with urlopen(base + '/api/documents/' + identifier + '/brief') as response:
+            assert response.headers['Content-Type'].startswith('text/markdown')
+            assert '.md' in response.headers['Content-Disposition']
+            assert b'First original passage' in response.read()
+        lib.publish(identifier, False, 'test', 'Withdraw')
+        for endpoint in ('brief', 'digest'):
+            with pytest.raises(HTTPError) as exc:
+                urlopen(base + '/api/documents/' + identifier + '/' + endpoint)
+            assert exc.value.code == 404
+
+
+def test_completion_inventory_verification_and_match_routes(tmp_path):
+    provider = FakeDecisionProvider()
+    with serving(tmp_path, provider) as (lib, identifier, base, _):
+        entry = dict(collection='wikileaks',release_id='test',source_item_id='one',
+            title='Source',format='text',source_url='https://example.org/one')
+        lib.register_inventory([entry])
+        lib.record_attempt(entry,dict(status='processed',document_id=identifier))
+        with urlopen(base+'/api/completion') as response:
+            assert json.load(response)[0]['counts']['downloaded']==1
+        with urlopen(base+'/api/completion/items?collection=wikileaks&release_id=test&stage=searchable') as response:
+            assert json.load(response)['total']==1
+        def post(action, origin=base):
+            values=dict(collection='wikileaks',release_id='test',source_item_id='one',candidate=identifier)
+            request=Request(base+'/api/completion/'+action,data=json.dumps(values).encode(),
+                headers={'Content-Type':'application/json','Origin':origin,'X-Archive-Request':'1'})
+            with urlopen(request) as response:
+                return json.load(response)
+        with pytest.raises(HTTPError) as exc:
+            post('match','https://other.example')
+        assert exc.value.code==403
+        assert post('verify')['checked']==1
+        assert post('match')['note'].startswith('Proposal only')

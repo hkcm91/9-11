@@ -9,7 +9,7 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, TextIO
+from typing import Any, Callable, Iterator, TextIO
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -257,6 +257,9 @@ def stream_csv_sample(
     timeout: float = 60.0,
     fieldnames: list[str] | None = None,
     required_any: tuple[str, ...] = (),
+    row_filter: Callable[[dict], bool] | None = None,
+    escapechar: str | None = None,
+    strict_csv: bool = False,
 ) -> dict[str, Any]:
     """Read only the first N CSV records and write a normalized local sample.
 
@@ -276,7 +279,8 @@ def stream_csv_sample(
 
     try:
         with _remote_csv_text_stream(url, timeout=timeout) as text_stream:
-            reader = csv.DictReader(text_stream, fieldnames=fieldnames)
+            reader = csv.DictReader(text_stream, fieldnames=fieldnames,
+                                    escapechar=escapechar, strict=strict_csv)
             resolved_fields = list(reader.fieldnames or [])
             if not resolved_fields:
                 raise BulkSourceError(f"bulk source had no usable CSV schema: {url}")
@@ -296,6 +300,10 @@ def stream_csv_sample(
                     if required_any and not any(
                         str(row.get(field) or "").strip() for field in required_any
                     ):
+                        skipped_invalid += 1
+                        continue
+
+                    if row_filter is not None and not row_filter(row):
                         skipped_invalid += 1
                         continue
 
@@ -343,6 +351,7 @@ def fetch_default_real_samples(
         timeout=timeout,
         fieldnames=CABLEGATE_FIELDS,
         required_any=("reference",),
+        escapechar="\\", strict_csv=True,
     )
     war = stream_csv_sample(
         war_diary_url,
