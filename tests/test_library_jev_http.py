@@ -52,6 +52,24 @@ def test_bulk_progress_endpoint_distinguishes_partial_transport(tmp_path):
         assert result['jobs'] == []
 
 
+def test_workbench_mutations_require_same_origin_and_keep_citations(tmp_path):
+    with serving(tmp_path) as (lib, identifier, base, post):
+        def save(path,body,origin=None):
+            request=Request(base+'/api/workbench/'+path,data=json.dumps(body).encode(),headers={
+                'Content-Type':'application/json','Origin':origin or base,'X-Archive-Request':'1'})
+            with urlopen(request) as response: return json.load(response)
+        with pytest.raises(HTTPError) as failure: save('folders',{'title':'Unauthorized'},'https://example.org')
+        assert failure.value.code==403
+        folder=save('folders',{'title':'Investigation','question':'What changed?'})
+        result=save('items',{'folder_id':folder['id'],'kind':'quote','document_id':identifier,'page':1,'text':'First original passage'})
+        assert result['items'][0]['source_sha256']==lib.document(identifier)['sha256']
+        with urlopen(base+'/api/workbench/export?id='+folder['id']) as response:
+            assert b'First original passage' in response.read()
+        request=Request(base+'/api/workbench/document?id='+identifier,headers={'Host':'untrusted.example'})
+        with pytest.raises(HTTPError) as failure: urlopen(request)
+        assert failure.value.code==403
+
+
 def test_http_comparison_citations_cache_and_publication_gate(tmp_path):
     provider = FakeDecisionProvider()
     with serving(tmp_path, provider) as (lib, identifier, base, post):

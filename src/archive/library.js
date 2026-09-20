@@ -5,15 +5,19 @@ let readerGeneration = 0;
 let jevReady = false;
 let jevBusy = false;
 const comparisonPages = {left: null, right: null};
+let reviewOffset=0, selectedFolder=null, folderCapture=null;
 
 function showView(view) {
-  if (!['archive', 'leads', 'jev', 'research', 'completion'].includes(view)) view = 'archive';
+  if (!['archive', 'leads', 'jev', 'research', 'completion','review','folders'].includes(view)) view = 'archive';
   document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
   document.querySelectorAll('[data-view]').forEach(button => {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
-  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons', research: 'Jev investigator', completion: 'Collection coverage'}[view];
+  $('view-name').textContent = {archive: 'Document archive', leads: 'Lead inbox', jev: 'Jev comparisons', research: 'Jev investigator', completion: 'Collection coverage',review:'Editorial review',folders:'Investigation folders'}[view];
+  if (view==='review') loadReview().catch(workbenchError);
+  if (view==='folders') loadFolders().catch(workbenchError);
+  if (view==='completion') loadCompletion().catch(error=>{$('completion-status').textContent=error.message;});
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('[data-view]').forEach(button => {
@@ -191,13 +195,20 @@ async function read() {
       ? 'Full cable text from the Internet Archive mirror. The preserved file contains the normalized source record; completeness against every publisher page has not been independently verified.'
       : 'Metadata only: this record is not the full original document.', 'warning'));
     box.append(source, document.createTextNode(' · '), link('Download preserved file', '/api/documents/' + doc.id + '/original'));
+    const saveFolder=el('button','Save to investigation');
+    saveFolder.onclick=()=>{
+      const selection=window.getSelection()?.toString() || '';
+      folderCapture={id:doc.id,title:doc.display_title || doc.title,page:number,quote:selection && page.text.includes(selection) ? selection.slice(0,1800) : ''};
+      location.hash='view=folders';
+    };
+    box.append(saveFolder);
     const details = el('details');
     details.append(el('summary', 'Source integrity'), el('p', 'SHA-256: ' + doc.sha256, 'meta'));
     box.append(details);
     if (doc.display_title && doc.display_title !== doc.title) box.append(el('p', 'Reading title · Original identifier: ' + doc.title, 'meta'));
     if (doc.brief_summary) {
       const brief = el('section', undefined, 'card');
-      brief.append(el('h3', 'Brief summary'), el('p', doc.brief_summary), el('p', doc.summary_status + ' · Quoted source passages; claims remain unverified.', 'meta'));
+      brief.append(el('h3', 'Brief summary'), el('p', doc.brief_summary), el('p', doc.summary_status + ' · ' + (doc.summary_kind || 'Quoted source passages; claims remain unverified.'), 'meta'));
       for (const passage of doc.editorial?.summary_passages || []) brief.append(link('Source passage · page ' + passage.page, pageLink(doc.id,passage.page)));
       if (doc.editorial) brief.append(el('p', 'Pages assessed: ' + doc.editorial.sampled_pages.join(', ') + ' of ' + doc.editorial.total_pages, 'meta'));
       box.append(brief);
@@ -650,4 +661,76 @@ async function showBulkProgress() {
   refresh.onclick = () => showBulkProgress().catch(error => { $('completion-status').textContent = error.message; });
   panel.append(el('p', 'Saved progress only; this does not confirm a worker is currently running. Other releases are listed below.', 'meta'), refresh);
 }
-loadCompletion().catch(error => { $('completion-status').textContent = error.message; });
+
+function workbenchError(error) { $('workbench-status').textContent=error.message; $('folder-status').textContent=error.message; }
+async function workbenchPost(path,body) {
+  const response=await fetch('/api/workbench/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Archive-Request':'1'},body:JSON.stringify(body)});
+  const result=await response.json(); if (!response.ok) throw Error(result.error || 'Unable to save'); return result;
+}
+function labeledInput(form,label,value='',multiline=false) {
+  const wrapper=el('label',label), input=el(multiline?'textarea':'input'); input.value=value; wrapper.append(input); form.append(wrapper); return input;
+}
+async function loadReview() {
+  $('review-count').textContent='Loading review queue…';
+  const result=await api('/api/workbench/review?'+new URLSearchParams({reason:$('review-reason').value,status:$('review-state').value,offset:reviewOffset}));
+  const list=$('review-list'); list.replaceChildren();
+  for (const row of result.items) {
+    const card=el('div',undefined,'card'), button=el('button',row.title);
+    button.onclick=()=>loadReviewDocument(row.id).catch(workbenchError);
+    card.append(button,el('p',row.collection+' · '+row.status+' · '+(row.public?'Published':'Not published'),'meta')); list.append(card);
+  }
+  $('review-count').textContent=result.total ? (reviewOffset+1)+'–'+(reviewOffset+result.items.length)+' of '+result.total : 'No records in this view.';
+  $('review-prev').disabled=reviewOffset===0; $('review-next').disabled=reviewOffset+result.items.length>=result.total;
+}
+async function loadReviewDocument(id) {
+  const doc=await api('/api/workbench/document?'+new URLSearchParams({id}));
+  const box=$('review-detail'); box.replaceChildren(el('h2',doc.title),link('Publisher source',doc.source_url),
+    el('p',(doc.public?'Published source':'Local review copy · not published')+' · Original SHA-256: '+doc.sha256,'meta'));
+  const source=el('pre',doc.page.text), pageForm=el('form'), pageInput=labeledInput(pageForm,'Source page','1'); pageInput.type='number'; pageInput.min='1'; pageInput.max=doc.page_count;
+  pageForm.append(el('button','Read page')); pageForm.onsubmit=async event=>{event.preventDefault();try{const next=await api('/api/workbench/document?'+new URLSearchParams({id,page:pageInput.value}));source.textContent=next.page.text || 'No extracted text on this page. OCR is still needed.';}catch(error){workbenchError(error);}};
+  box.append(el('p',doc.page_count+' source pages. OCR and publication are separate from editorial review.','meta'),pageForm,source);
+  const form=el('form'), title=labeledInput(form,'Reading title',doc.review?.title || doc.editorial?.title || doc.title), summary=labeledInput(form,'Brief summary',doc.review?.summary || doc.editorial?.summary || '',true), note=labeledInput(form,'Reason for this decision','',true);
+  title.maxLength=240; summary.maxLength=1600; note.maxLength=600; title.required=true; note.required=true;
+  const state=el('select'); state.setAttribute('aria-label','Editorial decision');
+  for (const [value,label] of [['reviewed','Save reviewed wording'],['deferred','Defer for further checking'],['open','Reopen review']]) { const option=el('option',label); option.value=value; state.append(option); }
+  const submit=el('button','Save review'); form.append(state,submit,el('p','Reviewed wording appears in the reader. Original files, publication status and OCR flags stay unchanged.','meta'));
+  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{await workbenchPost('review',{id,title:title.value,summary:summary.value,note:note.value,status:state.value,revision:doc.review?.id || 0});$('workbench-status').textContent='Review saved with its edit history.';await loadReviewDocument(id);await loadReview();}catch(error){workbenchError(error);}finally{submit.disabled=false;}};
+  box.append(form);
+  const history=el('details'); history.append(el('summary','Review history'));
+  for (const row of doc.history) history.append(el('p',row.created_at+' · '+row.status+' · '+row.note)); box.append(history);
+}
+for (const id of ['review-reason','review-state']) $(id).onchange=()=>{reviewOffset=0;loadReview().catch(workbenchError);};
+$('review-refresh').onclick=()=>loadReview().catch(workbenchError);
+$('review-prev').onclick=()=>{reviewOffset=Math.max(0,reviewOffset-25);loadReview().catch(workbenchError);};
+$('review-next').onclick=()=>{reviewOffset+=25;loadReview().catch(workbenchError);};
+
+async function loadFolders() {
+  const folders=await api('/api/workbench/folders'); $('folder-list').replaceChildren();
+  for (const folder of folders) {const button=el('button',folder.title+' · '+folder.item_count);button.onclick=()=>{selectedFolder=folder.id;loadFolder(folder.id).catch(workbenchError);};$('folder-list').append(button);}
+  if (!selectedFolder && folders.length) selectedFolder=folders[0].id;
+  if (selectedFolder) await loadFolder(selectedFolder);
+  else if(folderCapture) $('folder-status').textContent='Create an investigation to save '+folderCapture.title+'.';
+}
+$('folder-create').onsubmit=async event=>{event.preventDefault();try{const folder=await workbenchPost('folders',{title:$('folder-title').value,question:$('folder-question').value});selectedFolder=folder.id;$('folder-create').reset();await loadFolders();}catch(error){workbenchError(error);}};
+async function loadFolder(id) {
+  const folder=await api('/api/workbench/folder?'+new URLSearchParams({id}));
+  const box=$('folder-detail');box.replaceChildren(el('h2',folder.title),el('p',folder.question),link('Export investigation notes','/api/workbench/export?'+new URLSearchParams({id})));
+  const form=el('form'), kind=el('select');kind.setAttribute('aria-label','Investigation item type');
+  for (const [value,label] of [['document','Source document'],['quote','Exact quotation'],['question','Open question'],['hypothesis','Competing explanation'],['event','Timeline entry'],['note','Reporting note']]) {const option=el('option',label);option.value=value;kind.append(option);}
+  kind.value=folderCapture ? folderCapture.quote?'quote':'document':'question';form.append(kind);
+  if(folderCapture){form.append(el('p','Using '+folderCapture.title+' · page '+folderCapture.page,'meta'));const clear=el('button','Clear selected source');clear.type='button';clear.onclick=()=>{folderCapture=null;loadFolder(id).catch(workbenchError);};form.append(clear);}
+  else form.append(el('p','To attach a source, open a document and choose Save to investigation. Select source text first to save an exact quotation.','meta'));
+  const text=labeledInput(form,'Quotation, question or note',folderCapture?.quote || '',true), note=labeledInput(form,'Context or verification step','',true), date=labeledInput(form,'Timeline date (for timeline entries only)');date.type='date';text.maxLength=1800;note.maxLength=500;
+  const submit=el('button','Add to investigation');form.append(submit);
+  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{await workbenchPost('items',{folder_id:id,kind:kind.value,text:text.value,note:note.value,event_date:date.value,...(folderCapture?{document_id:folderCapture.id,page:folderCapture.page}:{})});folderCapture=null;$('folder-status').textContent='Saved with source details where supplied.';await loadFolders();}catch(error){workbenchError(error);}finally{submit.disabled=false;}};box.append(form);
+  const groups=[['event','Timeline'],['document','Sources'],['quote','Quotations'],['question','Open questions'],['hypothesis','Competing explanations — unverified'],['note','Reporting notes']];
+  for (const [type,label] of groups) {
+    const items=folder.items.filter(item=>item.kind===type).sort((a,b)=>(a.event_date || a.created_at).localeCompare(b.event_date || b.created_at));if(!items.length)continue;
+    box.append(el('h3',label));
+    for (const item of items) {const card=el('div',undefined,'card');card.append(el('p',(item.event_date?item.event_date+' · ':'')+(item.text || item.source_title || 'Source document')));
+      if(item.note)card.append(el('p',item.note,'meta'));
+      if(item.document_id)card.append(link(item.source_title+' · page '+item.page,pageLink(item.document_id,item.page)),el('p','SHA-256: '+item.source_sha256,'meta'));
+      if(!item.unavailable){const done=el('button',item.status==='done'?'Reopen':'Mark handled');done.onclick=async()=>{try{await workbenchPost('item-status',{folder_id:id,id:item.id,status:item.status==='done'?'open':'done'});await loadFolder(id);}catch(error){workbenchError(error);}};card.append(el('span',item.status+' · ','meta'),done);}box.append(card);
+    }
+  }
+}

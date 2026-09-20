@@ -30,7 +30,7 @@ def handler_for(database, objects, *, jev_factory=None):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path not in {"/api/compare", "/api/completion/verify", "/api/completion/match", "/api/digest", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
+            if self.path not in {"/api/workbench/review", "/api/workbench/folders", "/api/workbench/items", "/api/workbench/item-status", "/api/compare", "/api/completion/verify", "/api/completion/match", "/api/digest", "/api/research", "/api/leads/scan", "/api/leads/run", "/api/leads/assess", "/api/leads/review"}:
                 return self.respond(404, {"error": "Not found"})
             # No cross-origin browser can initiate a paid call or write proposals.
             host = self.headers.get("Host", "")
@@ -47,6 +47,14 @@ def handler_for(database, objects, *, jev_factory=None):
                 if not 0 < length <= 4096:
                     return self.respond(413, {"error": "Invalid request size"})
                 values = json.loads(self.rfile.read(length))
+                if self.path.startswith('/api/workbench/'):
+                    from archive.library_workbench import Workbench
+                    if not isinstance(values,dict): raise ValueError('Expected an object')
+                    library=DocumentLibrary(database,objects)
+                    desk=Workbench(library)
+                    action={'/api/workbench/review':desk.review,'/api/workbench/folders':desk.create_folder,
+                        '/api/workbench/items':desk.add,'/api/workbench/item-status':desk.item_status}[self.path]
+                    return self.respond(200,action(values))
                 if self.path.startswith('/api/completion/'):
                     from archive.library_completion import CompletionDesk
                     if not isinstance(values, dict) or not all(isinstance(values.get(k), str) for k in ('collection','release_id')):
@@ -158,6 +166,19 @@ def handler_for(database, objects, *, jev_factory=None):
                 if parsed.path == '/api/leads':
                     from archive.library_leads import LeadInbox
                     return self.respond(200, LeadInbox(library).list())
+                if parsed.path.startswith('/api/workbench/'):
+                    host=self.headers.get('Host','')
+                    if host not in {f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'}:
+                        return self.respond(403,{'error':'Open the local archive to access the research workspace.'})
+                    from archive.library_workbench import Workbench
+                    desk=Workbench(library); values=parse_qs(parsed.query)
+                    get=lambda key,default='': values.get(key,[default])[0]
+                    if parsed.path=='/api/workbench/review': return self.respond(200,desk.queue(get('reason','uncertain'),get('status','open'),int(get('offset','0'))))
+                    if parsed.path=='/api/workbench/document': return self.respond(200,desk.document(get('id'),int(get('page','1'))))
+                    if parsed.path=='/api/workbench/folders': return self.respond(200,desk.folders())
+                    if parsed.path=='/api/workbench/folder': return self.respond(200,desk.folder(get('id')))
+                    if parsed.path=='/api/workbench/export': return self.respond(200,desk.markdown(get('id')).encode('utf-8'),'text/markdown; charset=utf-8','investigation.md')
+                    return self.respond(404,{'error':'Not found'})
                 if parsed.path == '/api/research' or parsed.path.startswith('/api/research/'):
                     from archive.library_research import ResearchDesk
                     desk = ResearchDesk(library)

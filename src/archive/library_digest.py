@@ -37,6 +37,12 @@ def decorate(library, doc):
     text = page['text'] if page else ''
     summary = re.search(r'\b(?:BEGIN SUMMARY|SUMMARY)\s*[:.\-]?',text[:8000],re.I)
     preview = text[summary.end():summary.end()+550] if summary else text[:550]
+    manual=None
+    if library.db.execute("SELECT 1 FROM sqlite_master WHERE name='library_editor_reviews'").fetchone():
+        manual=library.db.execute("SELECT title,summary FROM library_editor_reviews WHERE document_id=? AND status='reviewed' ORDER BY id DESC LIMIT 1",(doc['id'],)).fetchone()
+    if manual:
+        return {**doc,'display_title':manual['title'],'original_title':doc['title'],'brief_summary':manual['summary'],
+            'summary_status':'Human-edited brief','summary_kind':'Editorial wording; check against the source','editorial':None}
     return {**doc, 'display_title': editorial['title'] if editorial else title, 'original_title': doc['title'],
         'brief_summary': editorial['summary'] if editorial else preview,
         'summary_status': editorial['status'] if editorial else 'Source excerpt · Jev review pending',
